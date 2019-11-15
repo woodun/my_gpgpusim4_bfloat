@@ -593,7 +593,7 @@ public:
         case 'N': m_write_alloc_policy = NO_WRITE_ALLOCATE; break;
         case 'W': m_write_alloc_policy = WRITE_ALLOCATE; break;
         case 'F': m_write_alloc_policy = FETCH_ON_WRITE; break;
-        case 'L': m_write_alloc_policy = LAZY_FETCH_ON_READ; break;
+        case 'L': m_write_alloc_policy = LAZY_FETCH_ON_READ; break;//////////myedit highlight: this is WRITE VALIDATE
 		default: exit_parse_error();
         }
 
@@ -743,7 +743,7 @@ protected:
     enum mshr_config_t m_mshr_type;
     enum cache_type m_cache_type;
 
-    write_allocate_policy_t m_write_alloc_policy;	// 'W' = Write allocate, 'N' = No write allocate
+    write_allocate_policy_t m_write_alloc_policy;	// 'W' = Write allocate, 'N' = No write allocate //myedit highlight: new config: 'F' = FETCH_ON_WRITE; 'L' = LAZY_FETCH_ON_READ;
 
     union {
         unsigned m_mshr_entries;

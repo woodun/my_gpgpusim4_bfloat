@@ -304,6 +304,14 @@ public:
    void ptx_fetch_inst( inst_t &inst ) const;
    void ptx_exec_inst( warp_inst_t &inst, unsigned lane_id );
 
+   //////////////myeditpredictor
+   void ptx_exec_ld_at_pc(addr_t pc_from_mf);
+
+   unsigned ptx_is_ld_at_pc(addr_t pc_from_mf);
+
+   unsigned ptx_is_global_at_pc(addr_t pc_from_mf);
+   //////////////myeditpredictor
+
    const ptx_version &get_ptx_version() const;
    void set_reg( const symbol *reg, const ptx_reg_t &value );
    void print_reg_thread (char * fname);
@@ -439,6 +447,11 @@ public:
    unsigned get_local_mem_stack_pointer() const { return m_local_mem_stack_pointer; }
 
    memory_space *get_global_memory() { return m_gpu->get_global_memory(); }
+
+   /////////////myeditpredictor
+   memory_space *get_cache_memory() { return m_gpu->get_cache_memory(); }
+   /////////////myeditpredictor
+
    memory_space *get_tex_memory() { return m_gpu->get_tex_memory(); }
    memory_space *get_surf_memory() { return m_gpu->get_surf_memory(); }
    memory_space *get_param_memory() { return m_kernel.get_param_memory(); }

@@ -35,6 +35,13 @@
 #include <list>
 #include <map>
 
+///////////////myedit bfloat
+extern unsigned print_profile;
+extern unsigned redo_in_l1;
+extern unsigned always_fill;
+extern unsigned bypassl2d;
+///////////////myedit bfloat
+
 enum memory_mode {
    READ_MODE = 0,
    WRITE_MODE

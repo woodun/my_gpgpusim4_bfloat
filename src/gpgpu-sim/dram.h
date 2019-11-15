@@ -106,6 +106,39 @@ enum bank_grp_bits_position{
 
 class mem_fetch;
 
+////////myeditprofile
+extern double bwutil;
+extern double bwutil_global_read;
+extern double bwutil_global_write;
+
+unsigned long long n_cmd;
+unsigned long long n_activity;
+unsigned long long n_nop;
+unsigned long long n_act;
+unsigned long long n_pre;
+unsigned long long n_ref;
+unsigned long long n_rd;
+unsigned long long n_rd_L2_A;
+unsigned long long n_wr;
+unsigned long long n_wr_WB;
+unsigned long long n_req;
+////////myeditprofile
+
+////////////myeditamc
+extern double temp_bwutil; //////////pf
+extern double temp_bwutil_global_read; //////////pf
+extern double temp_bwutil_global_write; //////////pf
+////////////myeditamc
+
+/////////////////myedit bfloat
+extern unsigned approximated_req_count_all;
+extern unsigned total_access_count_all;
+extern unsigned total_float_count_all;
+extern unsigned total_int_count_all;
+extern int threshold_length_static_all; ///////////all and partial are same for static
+extern int threshold_length_dynamic_all;
+/////////////////myedit bfloat
+
 class dram_t 
 {
 public:
@@ -178,6 +211,8 @@ private:
    unsigned int dram_eff_bins[10];
    unsigned int last_n_cmd, last_n_activity, last_bwutil;
 
+   ////////myeditprofile
+   /*
    unsigned long long n_cmd;
    unsigned long long n_activity;
    unsigned long long n_nop;
@@ -189,6 +224,9 @@ private:
    unsigned long long n_wr;
    unsigned long long n_wr_WB;
    unsigned long long n_req;
+   */
+   ////////myeditprofile
+
    unsigned long long max_mrqs_temp;
 
    //some statistics to see where BW is wasted?
@@ -228,7 +266,11 @@ private:
    double write_to_read_ratio_blp_rw_average;
    unsigned long long bkgrp_parallsim_rw;
 
-   unsigned int bwutil;
+  	////////myeditHW2
+	//unsigned int bwutil;
+	//double bwutil;
+	////////myeditHW2
+
    unsigned int max_mrqs;
    unsigned int ave_mrqs;
 
@@ -242,6 +284,25 @@ private:
    unsigned int n_req_partial;
    unsigned int ave_mrqs_partial;
    unsigned int bwutil_partial;
+
+	////////////myedit amc
+	double bwutil_partial_gread;	//per DRAM
+	double bwutil_partial_gwrite;	//per DRAM
+
+	double temp_bwutil_partial;	//////////pf
+	double temp_bwutil_partial_gread;	//////////pf
+	double temp_bwutil_partial_gwrite;	//////////pf
+	////////////myedit amc
+
+	/////////////myedit bfloat
+	unsigned int approximated_req_count_partial; //per DRAM
+	unsigned int total_access_count_partial; //per DRAM
+	unsigned int approximated_req_count_temp_partial; //per DRAM
+	unsigned int total_access_count_temp_partial; //per DRAM
+
+	double threshold_bw_dynamic_partial;
+	int threshold_length_dynamic_partial;
+	/////////////myedit bfloat
 
    class memory_stats_t *m_stats;
    class Stats* mrqq_Dist; //memory request queue inside DRAM  

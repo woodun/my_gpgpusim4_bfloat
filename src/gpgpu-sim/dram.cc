@@ -38,6 +38,11 @@
 int PRINT_CYCLE = 0;
 #endif
 
+/////////////////myedit bfloat
+unsigned actual_redo;
+unsigned actual_truncate;
+/////////////////myedit bfloat
+
 template class fifo_pipeline<mem_fetch>;
 template class fifo_pipeline<dram_req_t>;
 
@@ -145,6 +150,20 @@ dram_t::dram_t( unsigned int partition_id, const struct memory_config *config, m
    n_req_partial = 0;
    ave_mrqs_partial = 0;
    bwutil_partial = 0;
+
+	////////////myeditamc
+	bwutil_partial_gread = 0; //per DRAM
+	bwutil_partial_gwrite = 0; //per DRAM
+
+	temp_bwutil_partial = 0; //per DRAM
+	temp_bwutil_partial_gread = 0; //per DRAM
+	temp_bwutil_partial_gwrite = 0; //per DRAM
+	////////////myeditamc
+
+	/////////////myedit bfloat
+	approximated_req_count_partial = 0;
+	threshold_bw_dynamic_partial = 0;
+	/////////////myedit bfloat
 
    if ( queue_limit() )
       mrqq_Dist = StatCreate("mrqq_length",1, queue_limit());
@@ -591,9 +610,32 @@ bool dram_t::issue_col_command(int j)
           else
                 n_rd++;
 
+			////////myeditHW2
+			if (bk[j]->mrq->data->get_access_type() == GLOBAL_ACC_R) {
+				////////accu
+				bwutil_global_read += m_config->BL
+						/ m_config->data_command_freq_ratio; /////////overall
+				bwutil_partial_gread += m_config->BL
+						/ m_config->data_command_freq_ratio; /////////partial
+
+				////////temps
+				temp_bwutil_global_read += m_config->BL
+						/ m_config->data_command_freq_ratio; /////////overall
+				temp_bwutil_partial_gread += m_config->BL
+						/ m_config->data_command_freq_ratio; /////////partial
+			}
+			///////myeditHW2
+
           bwutil += m_config->BL/m_config->data_command_freq_ratio;
           bwutil_partial += m_config->BL/m_config->data_command_freq_ratio;
           bk[j]->n_access++;
+
+			////////////myeditamc
+			//////////temps
+			temp_bwutil += m_config->BL / m_config->data_command_freq_ratio;/////////overall
+			temp_bwutil_partial += m_config->BL
+					/ m_config->data_command_freq_ratio;	/////////partial
+			////////////myeditamc
 
 #ifdef DRAM_VERIFY
           PRINT_CYCLE=1;
@@ -630,8 +672,33 @@ bool dram_t::issue_col_command(int j)
           	n_wr_WB++;
           else
           	 n_wr++;
+
+			////////myeditHW2
+			if (bk[j]->mrq->data->get_access_type() == GLOBAL_ACC_W) {
+				/////////////accu
+				bwutil_global_write += m_config->BL
+						/ m_config->data_command_freq_ratio; /////////overall
+				bwutil_partial_gwrite += m_config->BL
+						/ m_config->data_command_freq_ratio; /////////partial
+
+				/////////////temps
+				temp_bwutil_global_write += m_config->BL
+						/ m_config->data_command_freq_ratio; /////////overall
+				temp_bwutil_partial_gwrite += m_config->BL
+						/ m_config->data_command_freq_ratio; /////////partial
+			}
+			///////myeditHW2
+
           bwutil += m_config->BL/m_config->data_command_freq_ratio;
           bwutil_partial += m_config->BL/m_config->data_command_freq_ratio;
+
+			////////////myeditamc
+			///////////temps
+			temp_bwutil += m_config->BL / m_config->data_command_freq_ratio;/////////overall
+			temp_bwutil_partial += m_config->BL
+					/ m_config->data_command_freq_ratio;	/////////partial
+			////////////myeditamc
+
 #ifdef DRAM_VERIFY
           PRINT_CYCLE=1;
           printf("\tWR  Bk:%d Row:%03x Col:%03x \n",
@@ -793,6 +860,30 @@ void dram_t::print( FILE* simFile) const
    fprintf(simFile, "\n");
    if(m_config->scheduler_type== DRAM_FRFCFS)
        fprintf(simFile, "mrqq: max=%d avg=%g\n", max_mrqs, (float)ave_mrqs/n_cmd);
+
+	/////////////////////myedit bfloat
+	float current_coverage_partial = 0;
+	if (total_access_count_partial != 0) {
+		current_coverage_partial = (float) (approximated_req_count_partial)
+				/ (float) (total_access_count_partial);	///////////coverage control
+	}
+
+	fprintf(simFile, "actual coverage%d: %f, last threshold_length%d: %d\n",
+				id, current_coverage_partial, id, threshold_length_dynamic_partial);
+
+	if(id == 5){
+
+		float current_coverage = 0;
+		if (total_access_count_all != 0) {
+			current_coverage = (float) (approximated_req_count_all)
+					/ (float) (total_access_count_all);	///////////coverage control
+		}
+
+		fprintf(simFile, "actual coverage all: %f, last threshold_length all: %d, approximated_req_count_all: %u, total_access_count_all: %u, total_float_count_all: %u, total_int_count_all: %u, "
+				"actual_redo: %u, actual_truncate: %u\n",
+				current_coverage, threshold_length_dynamic_all, approximated_req_count_all, total_access_count_all, total_float_count_all, total_int_count_all, actual_redo, actual_truncate);
+	}
+	/////////////////////myedit bfloat
 }
 
 void dram_t::visualize() const
@@ -826,6 +917,30 @@ void dram_t::print_stat( FILE* simFile )
    for (unsigned i=0;i<10;i++) fprintf(simFile, " %d", dram_eff_bins[i]);
    fprintf(simFile, "\n");
    max_mrqs_temp = 0;
+
+	/////////////////////myedit bfloat
+	float current_coverage_partial = 0;
+	if (total_access_count_partial != 0) {
+		current_coverage_partial = (float) (approximated_req_count_partial)
+				/ (float) (total_access_count_partial);	///////////coverage control
+	}
+
+	fprintf(simFile, "actual coverage%d: %f, last threshold_length%d: %d\n",
+				id, current_coverage_partial, id, threshold_length_dynamic_partial);
+
+	if(id == 5){
+
+		float current_coverage = 0;
+		if (total_access_count_all != 0) {
+			current_coverage = (float) (approximated_req_count_all)
+					/ (float) (total_access_count_all);	///////////coverage control
+		}
+
+		fprintf(simFile, "actual coverage all: %f, last threshold_length all: %d, approximated_req_count_all: %u, total_access_count_all: %u, total_float_count_all: %u, total_int_count_all: %u, "
+				"actual_redo: %u, actual_truncate: %u\n",
+				current_coverage, threshold_length_dynamic_all, approximated_req_count_all, total_access_count_all, total_float_count_all, total_int_count_all, actual_redo, actual_truncate);
+	}
+	/////////////////////myedit bfloat
 }
 
 void dram_t::visualizer_print( gzFile visualizer_file )

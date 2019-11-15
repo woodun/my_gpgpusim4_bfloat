@@ -93,6 +93,47 @@ template<unsigned BSIZE> void memory_space_impl<BSIZE>::write( mem_addr_t addr, 
    }
 }
 
+//////////////////myeditpredictor
+template<unsigned BSIZE> void memory_space_impl<BSIZE>::write_1(mem_addr_t addr,
+		size_t length, const void *data) {
+	mem_addr_t index = addr >> m_log2_block_size;
+	if ((addr + length) <= (index + 1) * BSIZE) {
+		// fast route for intra-block access
+		unsigned offset = addr & (BSIZE - 1);
+		unsigned nbytes = length;
+		m_data[index].write(offset, nbytes, (const unsigned char*) data);
+	} else {
+		// slow route for inter-block access
+		unsigned nbytes_remain = length;
+		unsigned src_offset = 0;
+		mem_addr_t current_addr = addr;
+
+		while (nbytes_remain > 0) {
+			unsigned offset = current_addr & (BSIZE - 1);
+			mem_addr_t page = current_addr >> m_log2_block_size;
+			mem_addr_t access_limit = offset + nbytes_remain;
+			if (access_limit > BSIZE) {
+				access_limit = BSIZE;
+			}
+
+			size_t tx_bytes = access_limit - offset;
+			m_data[page].write(offset, tx_bytes,
+					&((const unsigned char*) data)[src_offset]);
+
+			// advance pointers
+			src_offset += tx_bytes;
+			current_addr += tx_bytes;
+			nbytes_remain -= tx_bytes;
+		}
+		assert(nbytes_remain == 0);
+	}
+}
+
+template<unsigned BSIZE> void memory_space_impl<BSIZE>::clear() {
+	m_data.clear();
+}
+//////////////////myeditpredictor
+
 template<unsigned BSIZE> void memory_space_impl<BSIZE>::read_single_block( mem_addr_t blk_idx, mem_addr_t addr, size_t length, void *data) const
 {
    if ((addr + length) > (blk_idx + 1) * BSIZE) {

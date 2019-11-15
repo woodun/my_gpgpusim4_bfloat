@@ -27,6 +27,12 @@
 
 #include "gpu-cache.h"
 #include "stat-tool.h"
+
+///////////////////////myeditbfloat
+#include "../cuda-sim/ptx_sim.h"
+#include "shader.h"
+///////////////////////myeditbfloat
+
 #include <assert.h>
 
 // used to allocate memory that is large enough to adapt the changes in cache size across kernels
@@ -211,6 +217,10 @@ tag_array::tag_array( cache_config &config,
 
 void tag_array::init( int core_id, int type_id )
 {
+	///////myedit AMC
+	fill_count = 0;
+	///////myedit AMC
+
     m_access = 0;
     m_miss = 0;
     m_pending_hit = 0;
@@ -384,6 +394,146 @@ enum cache_request_status tag_array::access( new_addr_type addr, unsigned time, 
     return status;
 }
 
+////////myedit bfloat
+void tag_array::truncate_float(mem_fetch *mf) { /////////////must make sure it is float
+
+	actual_truncate++;
+
+	new_addr_type addr = mf->get_addr();
+	new_addr_type block_addr = m_config.block_addr(addr);
+
+	/////////////////////////////////////////////////////////////////////////////////////read from nearby address
+	mem_fetch *data = mf;
+	char * mydata = new char[data->get_data_size()];
+	new_addr_type address_limit;
+
+	address_limit = data->get_addr() + data->get_data_size(); //////////////myeditDSN
+
+	if (address_limit <= 0x100000000) {
+
+		//////////////read from global space
+		((memory_space_impl<8 * 1024> *) global_memory)->read(
+				(block_addr >> 7) << 7, data->get_data_size(), mydata);
+
+		/////////////////////truncate the data (make sure it is little endian)
+
+		/////////// truncation schemes:
+		/////////// F32 (1, 8, 23) -> F16 (1, 5, 10) -> F8 (1, 4, 3):
+		/////////// F32 (1, 8, 23) -> B16 (1, 8, 7)  -> B8 (1, 5, 2):
+
+		/////////// NF32 (1, 8, 23) -> NF16 (1, 5, 10) -> NF8 (1, 4, 3):
+		/////////// NF32 (1, 8, 23) -> NB16 (1, 8, 7) -> NB8 (1, 5, 2):
+
+
+		/////////// I32 -> IL16 -> IL8 (left remained): NA. Float cannot be stored in int. Int stored in int is proved to be bad for energy and error in exp1. But int can be stored in float and tested in above shemes.
+		/////////// I32 -> IR16 -> IR8 (right remained): NA. Float cannot be stored in int. Int stored in int is proved to be bad for energy and error in exp1. But int can be stored in float and tested in above shemes.
+
+		/////// F32: 127 to 1, 0 to -126 (254 to 128, 127 to 1), 0 is subnormal, 255 is inf
+		/////// F16: 15 to 1, 0 to -14 (30 to 16, 15 to 1), 0 is subnormal, 31 is inf
+		/////// F8: 7 to 1, 0 to -6 (14 to 8, 7 to 1), 0 is subnormal, 15 is inf
+
+		/////// F32: 127 to 1, 0 to -126 (254 to 128, 127 to 1), 0 is subnormal, 255 is inf
+		/////// B16: 127 to 1, 0 to -126 (254 to 128, 127 to 1), 0 is subnormal, 255 is inf
+		/////// B8: 15 to 1, 0 to -14 (30 to 16, 15 to 1), 0 is subnormal, 31 is inf
+
+		/////// NF32: 127 to 1, 0 to -126 (127 to 1, -0 to -126), 0 is subnormal, 255 is inf
+		/////// NF16: 15 to 1, 0 to -14 (15 to 1, -0 to -14), 0 is subnormal, 31 is inf
+		/////// NF8: 7 to 1, 0 to -6 (7 to 1, -0 to -6), 0 is subnormal, 15 is inf
+
+		/////// NF32: 127 to 1, 0 to -126 (127 to 1, -0 to -126), 0 is subnormal, 255 is inf
+		/////// NB16: 127 to 1, 0 to -126 (127 to 1, -0 to -126), 0 is subnormal, 255 is inf
+		/////// NB8: 15 to 1, 0 to -14 (15 to 1, -0 to -14), 0 is subnormal, 31 is inf
+
+		////////scenarios:
+		////////scenario 0: No truncation
+		////////scenario 1: float32 to float16 and to float8 (depending on truncate_ratio)
+		////////scenario 2: float32 to bfloat16 and to bfloat8 (depending on truncate_ratio)
+		////////scenario 3: new float32 to new float16 and to new float8 (depending on truncate_ratio)
+		////////scenario 4: new float32 to new bfloat16 and to new bfloat8 (depending on truncate_ratio)
+		////////scenario 5: profiling mode, truncated value is not written back to memory
+
+		////////DBI toggle: enable/disable DBI
+		////////energy profiling toggle: get the number of bit flips and ones, when working with scenario 5, counts for all truncation scenarios are collected. truncated value is not written back to memory.
+		////////error profiling toggle: collect the hardware error or not, when working with scenario 5, hardware errors for all truncation scenarios are collected. truncated value is not written back to memory.
+		////////question: is bit flips modeled in gpuwattch? If not, how do we model their % memory energy or % system energy based on their count? (Joule per count? find this info)
+
+		////////power model vampire, drampower
+
+		if(get_truncation_scenario() == 0){//////////////In scenario 0, when truncate truncate float to bfloat?
+
+			if(mf->get_truncate_ratio() == 2){/////////In scenario 0, this is float32 to bfloat16. In other scenarios, this code remains the same even when truncate new_float32 to bfloat16.
+				for(int i = 0; i < data->get_data_size(); i += 4){
+					////////////////truncate the first two bytes
+					mydata[i] = 0;
+					mydata[i + 1] = 0;
+				}
+			}else if(mf->get_truncate_ratio() == 4){
+
+				unsigned char top_byte;
+				unsigned char second_byte;
+				unsigned char exp_byte;
+				int exp_value;
+				for(int i = 0; i < data->get_data_size(); i += 4){
+					////////////////truncate the first two bytes
+					mydata[i] = 0;
+					mydata[i + 1] = 0;
+
+					second_byte = mydata[i + 2];
+					top_byte = mydata[i + 3];
+
+					exp_byte = ( (top_byte & 127) << 1 ) | (second_byte >> 7); //getting bit values for exp bits
+					exp_value = exp_byte - 127;
+
+					if(exp_value == 128 || exp_value == -127){ ///////////////////use zeros for both subnormal and inf cases
+						//do nothing
+					}else{
+						if(exp_value > 0){
+							exp_value = exp_value & 15;
+						}else{
+							exp_value = (exp_value - 1);/////////////0 to -126 correspond -1 to -127 in new format representation, new_format = exp_value - 1.
+							exp_value = exp_value & 15;
+							exp_value = exp_value + 1;
+						}
+					}
+
+					exp_byte = exp_value  + 127;
+
+					second_byte = second_byte & 96; ///////truncate the last 5 bits, clear the first bit
+					second_byte = second_byte | ( exp_byte << 7 ); ////////assign exp_byte last bit to second_byte first bit
+					mydata[i + 2] = second_byte;
+
+					top_byte = top_byte & 128; //////////clear the last 7 bits
+					top_byte = top_byte | ( exp_byte >> 1 ); ////////assign exp_byte first 7 bits to top_byte last 7 bits
+					mydata[i + 3] = top_byte;
+				}
+			}//////////////////////end of: if(get_truncation_scenario() == 0){
+
+		}else if(get_truncation_scenario() == 1){//////////////In scenario 1,
+
+		}
+
+		//////////////write to cache space
+		((memory_space_impl<8 * 1024> *) cache_memory)->write_1(
+				(block_addr >> 7) << 7, data->get_data_size(), mydata);
+	} else {
+		printf("out of memory bound of 4gb\n");
+	}
+
+	switch (mf->get_type()) {
+	case READ_REQUEST:  break;
+	case WRITE_REQUEST: break;
+	case READ_REPLY:    break;
+	case WRITE_ACK:     break;
+	default: printf("debug2:############# mf_type=%d", mf->get_type());
+	assert (0);
+	}
+
+	delete[] mydata;
+}
+////////myedit bfloat
+
+///////////////////////////////////////////////////myedit bfloat
+/*
 void tag_array::fill( new_addr_type addr, unsigned time, mem_fetch* mf)
 {
     fill(addr, time, mf->get_access_sector_mask());
@@ -410,7 +560,37 @@ void tag_array::fill( unsigned index, unsigned time, mem_fetch* mf)
     assert( m_config.m_alloc_policy == ON_MISS );
     m_lines[index]->fill(time, mf->get_access_sector_mask());
 }
+*/
 
+void tag_array::fill( new_addr_type addr, unsigned time, mem_fetch* mf, unsigned predicted) { ////////myedit AMC
+
+    fill(addr, time, mf->get_access_sector_mask(), predicted);////////myedit AMC
+}
+
+void tag_array::fill( new_addr_type addr, unsigned time, mem_access_sector_mask_t mask, unsigned predicted) { ////////myedit AMC
+
+    //assert( m_config.m_alloc_policy == ON_FILL );
+    unsigned idx;
+    enum cache_request_status status = probe(addr,idx,mask);
+    //assert(status==MISS||status==SECTOR_MISS); // MSHR should have prevented redundant memory request
+    if(status==MISS)
+    	m_lines[idx]->allocate( m_config.tag(addr), m_config.block_addr(addr), time, mask );
+    else if (status==SECTOR_MISS) {
+    	assert(m_config.m_cache_type == SECTOR);
+    	((sector_cache_block*)m_lines[idx])->allocate_sector( time, mask );
+    }
+
+    m_lines[idx]->fill(time, mask, predicted); ////////myedit AMC
+    fill_count++; ////////myedit AMC
+}
+
+void tag_array::fill( unsigned index, unsigned time, mem_fetch* mf, unsigned predicted){ ////////myedit AMC
+
+    assert( m_config.m_alloc_policy == ON_MISS );
+    m_lines[index]->fill(time, mf->get_access_sector_mask(), predicted); ////////myedit AMC ///////could here be a hit since later miss is predicted?
+    fill_count++; ////////myedit AMC
+}
+///////////////////////////////////////////////////myedit bfloat
 
 //TODO: we need write back the flushed data to the upper level
 void tag_array::flush() 
@@ -558,6 +738,8 @@ bool mshr_table::is_read_after_write_pending( new_addr_type block_addr){
 
 }
 
+/////////////////////////////////////myedit bfloat
+/*
 /// Accept a new cache fill response: mark entry ready for processing
 void mshr_table::mark_ready( new_addr_type block_addr, bool &has_atomic ){
     assert( !busy() );
@@ -582,6 +764,45 @@ mem_fetch *mshr_table::next_access(){
     }
     return result;
 }
+*/
+
+/// Accept a new cache fill response: mark entry ready for processing
+void mshr_table::mark_ready( new_addr_type block_addr, bool &has_atomic, unsigned is_approximated, int is_l2) { //////////////myedit AMC
+    assert( !busy() );
+    table::iterator a = m_data.find(block_addr);
+
+	//////////////myedit AMC
+	a->second.is_approx = is_approximated;
+	//////////////myedit AMC
+
+    assert( a != m_data.end() );
+    m_current_response.push_back( block_addr );
+    has_atomic = a->second.m_has_atomic;
+    assert( m_current_response.size() <= m_data.size() );
+}
+
+/// Returns next ready access
+mem_fetch *mshr_table::next_access(){
+    assert( access_ready() );
+    new_addr_type block_addr = m_current_response.front();
+    assert( !m_data[block_addr].m_list.empty() );
+    mem_fetch *result = m_data[block_addr].m_list.front();
+    m_data[block_addr].m_list.pop_front();
+
+	//////////////myedit AMC
+	if (m_data[block_addr].is_approx) { ////////////do this before erase.
+		result->set_approx();  //////myeditDSN: set prediction status for each mf in the mshr_entry, using its is_approx field.
+	}
+	//////////////myedit AMC
+
+    if ( m_data[block_addr].m_list.empty() ) {
+        // release entry
+        m_data.erase(block_addr);
+        m_current_response.pop_front();
+    }
+    return result;
+}
+/////////////////////////////////////myedit bfloat
 
 void mshr_table::display( FILE *fp ) const{
     fprintf(fp,"MSHR contents\n");
@@ -1026,6 +1247,8 @@ void baseline_cache::cycle(){
     m_bandwidth_management.replenish_port_bandwidth(); 
 }
 
+///////////////////////////////////myedit bfloat
+/*
 /// Interface for response from lower memory level (model bandwidth restictions in caller)
 void baseline_cache::fill(mem_fetch *mf, unsigned time){
 
@@ -1067,8 +1290,124 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time){
         block->set_status(MODIFIED, mf->get_access_sector_mask()); // mark line as dirty for atomic operation
     }
     m_extra_mf_fields.erase(mf);
+    m_bandwidth_management.use_fill_port(mf);
+}
+*/
+
+/// Interface for response from lower memory level (model bandwidth restictions in caller)
+void baseline_cache::fill(mem_fetch *mf, unsigned time){
+
+	if(m_config.m_mshr_type == SECTOR_ASSOC) {
+	assert(mf->get_original_mf());
+	extra_mf_fields_lookup::iterator e = m_extra_mf_fields.find(mf->get_original_mf());
+    assert( e != m_extra_mf_fields.end() );
+    e->second.pending_read--;
+
+    if(e->second.pending_read > 0) {
+    	//wait for the other requests to come back
+    	delete mf;
+    	return;
+      } else {
+    	mem_fetch *temp = mf;
+    	mf = mf->get_original_mf();
+    	delete temp;
+      }
+	}
+
+    extra_mf_fields_lookup::iterator e = m_extra_mf_fields.find(mf);
+    assert( e != m_extra_mf_fields.end() );
+    assert( e->second.m_valid );
+    mf->set_data_size( e->second.m_data_size );
+    mf->set_addr( e->second.m_addr );
+
+    //////////////////myedit bfloat
+    /*
+    if ( m_config.m_alloc_policy == ON_MISS )
+        m_tag_array->fill(e->second.m_cache_index,time,mf);
+    else if ( m_config.m_alloc_policy == ON_FILL ) {
+        m_tag_array->fill(e->second.m_block_addr,time,mf);
+        if(m_config.is_streaming())
+        	m_tag_array->remove_pending_line(mf);
+    }
+    else abort();
+    */
+
+	if (!mf->is_approximated() || always_fill) {
+
+		if (m_config.m_alloc_policy == ON_MISS) {
+
+			if (m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
+					&& mf->is_approximated() ) {	/////////////only l2 can search, l1 is using LOCAL_WB_GLOBAL_WT
+
+					//printf("##########debug:m_name:%s\n", m_name.c_str());/////////////debug
+					//fflush (stdout);
+
+				m_tag_array->truncate_float(mf);	//////////////truncate happens before fill
+			}
+
+			/////////////////////////myedithighlight: need different implementation now
+			//m_tag_array->fill(e->second.m_cache_index, time,
+			//		mf->is_approximated());	////////myedit amc  ///////////myeditDSN: both l1 and l2 are marked correctly with prediction status.
+
+			m_tag_array->fill(e->second.m_cache_index,time,mf);
+			////////myedithighlight: need different implementation now
+
+		} else if (m_config.m_alloc_policy == ON_FILL) {
+
+			if (m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
+					&& mf->is_approximated() ) {	/////////////only l2 can search, l1 is using LOCAL_WB_GLOBAL_WT
+
+					//printf("##########debug:m_name:%s\n", m_name.c_str());/////////////debug
+					//fflush (stdout);
+				m_tag_array->truncate_float(mf);
+			}
+
+			////////myedithighlight: need different implementation now
+			//m_tag_array->fill(e->second.m_block_addr, time,
+			//		mf->is_approximated());	////////myedit amc  ///////////myeditDSN: both l1 and l2 are marked correctly with prediction status.
+
+			m_tag_array->fill(e->second.m_block_addr,time,mf);
+
+			if(m_config.is_streaming()){
+				m_tag_array->remove_pending_line(mf);
+			}
+			////////myedithighlight: need different implementation now
+		} else {
+
+			abort();
+		}
+
+
+	    if ( m_config.m_alloc_policy == ON_MISS )
+	        m_tag_array->fill(e->second.m_cache_index,time,mf);
+	    else if ( m_config.m_alloc_policy == ON_FILL ) {
+	        m_tag_array->fill(e->second.m_block_addr,time,mf);
+	        if(m_config.is_streaming())
+	        	m_tag_array->remove_pending_line(mf);
+	    }else abort();
+
+	} else {////////do not fill if it is approximated. (on_fill makes sure it's not allocated and reserved forever.)
+
+		assert(m_config.m_alloc_policy == ON_FILL);	///////////////it cannot be allocated beforehand since we don't know if we will fill it or not (we do not fill the cacheline with approx data.)
+	}
+    //////////////////myedit bfloat
+
+    bool has_atomic = false;
+
+	/////////////myedit bfloat: should not delay
+    //m_mshrs.mark_ready(e->second.m_block_addr, has_atomic);
+	m_mshrs.mark_ready(e->second.m_block_addr, has_atomic, mf->is_approximated(), 0);
+	/////////////myedit bfloat: should not delay
+
+    if (has_atomic) {
+        assert(m_config.m_alloc_policy == ON_MISS);
+        cache_block_t* block = m_tag_array->get_block(e->second.m_cache_index);
+        block->set_status(MODIFIED, mf->get_access_sector_mask()); // mark line as dirty for atomic operation
+    }
+    m_extra_mf_fields.erase(mf);
     m_bandwidth_management.use_fill_port(mf); 
 }
+///////////////////////////////////myedit bfloat
 
 /// Checks if mf is waiting to be filled by lower memory level
 bool baseline_cache::waiting_for_fill( mem_fetch *mf ){
@@ -1173,6 +1512,9 @@ cache_request_status data_cache::wr_hit_wt(new_addr_type addr, unsigned cache_in
 	m_tag_array->access(block_addr,time,cache_index,mf); // update LRU state
 	cache_block_t* block = m_tag_array->get_block(cache_index);
 	block->set_status(MODIFIED, mf->get_access_sector_mask());
+
+	//block.is_predicted = 0; /////////myedit amc //////////////myeditDSN: although there is no predicted writes, write shall not change the prediction status to non-predicted,
+	/////////////////////////because there might be unchanged parts which still remain their status. we write to both cache and global space and use one of them accordingly.
 
 	// generate a write-through
 	send_write_request(mf, cache_event(WRITE_REQUEST_SENT), time, events);
@@ -1299,6 +1641,7 @@ data_cache::wr_miss_wa_fetch_on_write( new_addr_type addr,
 	{
 		//if the request writes to the whole cache line/sector, then, write and set cache line Modified.
 		//and no need to send read request to memory or reserve mshr
+		//////////////myedit highlight: the naive version is like a write-through on write miss. Therefore no need to set Modified.
 
 		if(miss_queue_full(0)) {
 			m_stats.inc_fail_stats(mf->get_access_type(), MISS_QUEUE_FULL);
@@ -1386,7 +1729,7 @@ data_cache::wr_miss_wa_fetch_on_write( new_addr_type addr,
 							   n_mf, time, do_miss, wb, evicted, events, false, true);
 
 			cache_block_t* block = m_tag_array->get_block(cache_index);
-			block->set_modified_on_fill(true, mf->get_access_sector_mask());
+			block->set_modified_on_fill(true, mf->get_access_sector_mask());  //////////////myedit highlight: the write content is written on top of the read. it is buffered somewhere waiting?
 
 			events.push_back(cache_event(WRITE_ALLOCATE_SENT));
 
@@ -1414,9 +1757,10 @@ data_cache::wr_miss_wa_lazy_fetch_on_read( new_addr_type addr,
 	    new_addr_type block_addr = m_config.block_addr(addr);
 	    new_addr_type mshr_addr = m_config.mshr_addr(mf->get_addr());
 
-
-		//if the request writes to the whole cache line/sector, then, write and set cache line Modified.
+	   	//if the request writes to the whole cache line/sector, then, write and set cache line Modified.
 		//and no need to send read request to memory or reserve mshr
+	    //////////////myedit highlight: titanx use this so the other two are not modified. titanx l1 is streaming (on-fill), l2 is on-miss.
+	    //////////////myedit highlight: naive: write-read-write; fetch-on-write: modify-write or read-modify-write; write-validate: modify-write. (take care of sector and non-readable blocks.)
 
 		if(miss_queue_full(0)) {
 			m_stats.inc_fail_stats(mf->get_access_type(), MISS_QUEUE_FULL);
@@ -1429,12 +1773,15 @@ data_cache::wr_miss_wa_lazy_fetch_on_read( new_addr_type addr,
 		cache_request_status m_status =  m_tag_array->access(block_addr,time,cache_index,wb,evicted,mf);
 		assert(m_status != HIT);
 		cache_block_t* block = m_tag_array->get_block(cache_index);
-		block->set_status(MODIFIED, mf->get_access_sector_mask());
+		block->set_status(MODIFIED, mf->get_access_sector_mask());//////////myedit highlight: mf only contains one sector if using. proof: assert(sector_mask.count() == 1); in get_sector_index(.
 		if(m_status == HIT_RESERVED) {
-			block->set_ignore_on_fill(true, mf->get_access_sector_mask());
+			block->set_ignore_on_fill(true, mf->get_access_sector_mask());//////////////myedit highlight: not used
 			block->set_modified_on_fill(true, mf->get_access_sector_mask());
 		}
 
+		//////////////myedit highlight: this code is just copied from above expect for this. Could be buggy if not the case.
+		/////////////myedit highlight: const unsigned MAX_MEMORY_ACCESS_SIZE = 128; typedef std::bitset<MAX_MEMORY_ACCESS_SIZE> mem_access_byte_mask_t;
+		/////////////myedit highlight: titanx sector vs non-sector cache performance exp? in the sector case, truncation only make sense if more than one sector is accessed per cache line at a time.
 		if(mf->get_access_byte_mask().count() == m_config.get_atom_sz())
 		{
 			block->set_m_readable(true, mf->get_access_sector_mask());
@@ -1448,8 +1795,63 @@ data_cache::wr_miss_wa_lazy_fetch_on_read( new_addr_type addr,
 			   // (already modified lower level)
 			   if( wb && (m_config.m_write_policy != WRITE_THROUGH) ) {
 				   mem_fetch *wb = m_memfetch_creator->alloc(evicted.m_block_addr,
-					   m_wrbk_type,evicted.m_modified_size,true);
+					   m_wrbk_type,evicted.m_modified_size,true);///////myedit highlight: evicted.m_modified_size IS return modified * SECTOR_SIZE;. not the exact modified bytes when non-readable.
+				   ///////myedit highlight: write-validate should record which words are valid, but it is not implemented here. we can store the get_access_byte_mask() here.
+				   ///////myedit highlight: for both fetch-on-write and write-validate, writing only the modified part to global memory is OK.
+				   //////////////////////// (but for low-precision implementation, we cannot just implement this one for both.
+				   //////////////////////// When fetch-on-write write on a low-precision line, the entire line should be written back to the global memory.)
+				   ///////myedit highlight: question: when write-validate works with write-hit-write-back, does it still only write back the modified words? or all valid words (hit a valid line)?
+				   //////////////////////// for our favor, we can assume that it still only write back the modified words. (thus we just only implement write-validate with modified-words as mask.)
+				   //////////////////////// however, if writing the whole cache line or sector to global memory, write-validate causes error when invalid data exists.
+				   //////////////////////// (we cannot write non-readable blocks to the dram!)
+				   ///////myedit highlight: question: how is flit transmitted through interconnect? does it really have 32B bit width?
+				   ////////////////////////////////// (also lead to the question does truncating the 32B flit make sense?)
+				   ///////myedit highlight: P.S. if we only write the changed part for write-validate, it does not matter if we write to cache and global space every time together
+				   ///////////////////////////// or wait till write back to write from cache to global space (preferred because of code performance).
 				   send_write_request(wb, cache_event(WRITE_BACK_REQUEST_SENT, evicted), time, events);
+
+					////////////myeditDSN
+					////////////////////////////////here we only cover the l2 to dram case, because l1 is using we. (we only need to fix l1 if l1 uses wb)
+					/////////////myedit bfloat: think carefully, when write back to the dram,
+				   //////////////////////////// do you write the whole thing or just write the bfloat (also just store the bfloat part of the st operation in cache)?
+				   /////////////myedit highlight: do we need to actually implement the modified-words mask? No, because that is used to write back only the modified part to dram for evicted lines,
+				   ////////////////////////////// but the modified part is already written to the global space at the same time when written to the cache space in our implementation.
+
+					if(m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
+							&& evicted.is_predicted == 1){ ////////////////////only l2 need to do the copy from cache space to global space
+						/////////////////myedit highlight: for a fetch-on-write cache, it does not have the modified-words mask, therefore, whole cache line must be written back to the dram.
+						////////////////////////////////// however, for our favor, we can assume that it does have the modified-words mask, and can switch to write-validate mode.
+						////////////////////////////////// just that it uses the fetch-on-write to avoid the unreadable lines when read hit.
+						////////////////////////////////// if that is the case, then the following code to write the modified predicted line back to the dram when evicted is not required.
+						////////////////////////////////// this is because in st_impl( in instructions.cc, the modified words are written to both cache and global space already.
+						////////////////////////////////// so if we only write according to the modified-words mask, copying both the modified part and the remaining predicted part is unnecessary.
+
+						/*
+						/////////////////////////////read from cache space
+						mem_fetch *data = wb;
+						char * mydata = new char[data->get_data_size()];
+						new_addr_type address_limit;
+
+						address_limit = data->get_addr() + data->get_data_size();
+
+						if (address_limit <= 0x100000000) {
+							/////////////////////////////read from cache space
+							((memory_space_impl<8 * 1024> *) cache_memory)->read(
+										(data->get_addr() >> 7) << 7, data->get_data_size(), mydata);
+
+							/////////////////////////////write to global space
+							((memory_space_impl<8 * 1024> *) global_memory)->write_1(
+									(data->get_addr() >> 7) << 7, data->get_data_size(), mydata);
+
+						} else {
+							printf("out of memory bound of 4gb\n");
+						}
+
+						delete[] mydata;
+						/////////////////////////////write to global space
+						*/
+					}
+					////////////myeditDSN
 			   }
 			   return MISS;
 		   }

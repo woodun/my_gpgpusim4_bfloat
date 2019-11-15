@@ -1528,8 +1528,7 @@ int tensorcore_op(int inst_opcode){
        else	
 		return 0;
 }
-void ptx_thread_info::ptx_exec_inst( warp_inst_t &inst, unsigned lane_id)
-{
+void ptx_thread_info::ptx_exec_inst( warp_inst_t &inst, unsigned lane_id){
     
    bool skip = false;
    int op_classification = 0;
@@ -1740,6 +1739,162 @@ void ptx_thread_info::ptx_exec_inst( warp_inst_t &inst, unsigned lane_id)
    }
       
 }
+
+//////////////myeditpredictor
+unsigned get_operand_nbits_1(const operand_info &op) {
+	if (op.is_reg()) {
+		const symbol *sym = op.get_symbol();
+		const type_info *typ = sym->type();
+		type_info_key t = typ->get_key();
+		switch (t.scalar_type()) {
+		case PRED_TYPE:
+			return 1;
+		case B8_TYPE:
+		case S8_TYPE:
+		case U8_TYPE:
+			return 8;
+		case S16_TYPE:
+		case U16_TYPE:
+		case F16_TYPE:
+		case B16_TYPE:
+			return 16;
+		case S32_TYPE:
+		case U32_TYPE:
+		case F32_TYPE:
+		case B32_TYPE:
+			return 32;
+		case S64_TYPE:
+		case U64_TYPE:
+		case F64_TYPE:
+		case B64_TYPE:
+			return 64;
+		default:
+			printf("ERROR: unknown register type\n");
+			fflush (stdout);
+			abort();
+		}
+	} else {
+		printf(
+				"ERROR: Need to implement get_operand_nbits() for currently unsupported operand_info type\n");
+		fflush (stdout);
+		abort();
+	}
+	return 0;
+}
+
+void sign_extend_1(ptx_reg_t &data, unsigned src_size,
+		const operand_info &dst) {
+	if (!dst.is_reg())
+		return;
+	unsigned dst_size = get_operand_nbits_1(dst);
+	if (src_size >= dst_size)
+		return;
+	// src_size < dst_size
+	unsigned long long mask = 1;
+	mask <<= (src_size - 1);
+	if ((mask & data.u64) == 0) {
+		// no need to sign extend
+		return;
+	}
+	// need to sign extend
+	mask = 1;
+	mask <<= dst_size - src_size;
+	mask -= 1;
+	mask <<= src_size;
+	data.u64 |= mask;
+}
+
+unsigned ptx_thread_info::ptx_is_global_at_pc(addr_t pc_from_mf) {
+	addr_t pc = pc_from_mf;
+	const ptx_instruction *pI = m_func_info->get_instruction(pc);
+
+	memory_space_t space = pI->get_space();
+
+	if (space.get_type() == global_space) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+unsigned ptx_thread_info::ptx_is_ld_at_pc(addr_t pc_from_mf) {
+	addr_t pc = pc_from_mf;
+	const ptx_instruction *pI = m_func_info->get_instruction(pc);
+
+	if (pI->get_opcode() == LD_OP) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+void ptx_thread_info::ptx_exec_ld_at_pc(addr_t pc_from_mf) {
+	addr_t pc = pc_from_mf;
+	const ptx_instruction *pI = m_func_info->get_instruction(pc);
+
+	try {
+		if (is_done()) {
+			printf(
+					"attempted to execute instruction on a thread that is already done.\n");
+			assert(0);
+		}
+
+		assert(pI->get_opcode() == LD_OP);
+
+		const operand_info &dst = pI->dst();
+		const operand_info &src1 = pI->src1();
+
+		unsigned type = pI->get_type();
+
+		ptx_reg_t src1_data = get_operand_value(src1, dst, type, this, 1);
+		ptx_reg_t data;
+		unsigned vector_spec = pI->get_vector();
+
+		//memory_space_t space = pI->get_space();
+		//assert(space.get_type() == global_space);
+
+		memory_space *mem = get_cache_memory();
+		addr_t addr = src1_data.u32;
+
+		size_t size;
+		int t;
+		data.u64 = 0;
+		type_info_key::type_decode(type, size, t);
+		if (!vector_spec) {
+			mem->read(addr, size / 8, &data.s64);
+			if (type == S16_TYPE || type == S32_TYPE)
+				sign_extend_1(data, size, dst);
+			set_operand_value(dst, data, type, this, pI);
+		} else {
+			ptx_reg_t data1, data2, data3, data4;
+			mem->read(addr, size / 8, &data1.s64);
+			mem->read(addr + size / 8, size / 8, &data2.s64);
+			if (vector_spec != V2_TYPE) { //either V3 or V4
+				mem->read(addr + 2 * size / 8, size / 8, &data3.s64);
+				if (vector_spec != V3_TYPE) { //v4
+					mem->read(addr + 3 * size / 8, size / 8, &data4.s64);
+					set_vector_operand_values(dst, data1, data2, data3, data4);
+				} else {
+					set_vector_operand_values(dst, data1, data2, data3, data3);
+				}
+			} else {
+				set_vector_operand_values(dst, data1, data2, data2, data2);
+			}
+		}
+
+		// Run exit instruction if exit option included
+		if (pI->is_exit()) {
+			exit_impl(pI, this);
+		}
+
+	} catch (int x) {
+		printf("GPGPU-Sim PTX: ERROR (%d) executing intruction (%s:%u)\n", x,
+				pI->source_file(), pI->source_line());
+		printf("GPGPU-Sim PTX:       '%s'\n", pI->get_source());
+		abort();
+	}
+}
+//////////////myeditpredictor
 
 void set_param_gpgpu_num_shaders(int num_shaders)
 {
