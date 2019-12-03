@@ -575,12 +575,12 @@ void tag_array::fill( new_addr_type addr, unsigned time, mem_access_sector_mask_
     //assert(status==MISS||status==SECTOR_MISS); // MSHR should have prevented redundant memory request
     if(status==MISS)
     	m_lines[idx]->allocate( m_config.tag(addr), m_config.block_addr(addr), time, mask );
-    else if (status==SECTOR_MISS) {
+    else if (status==SECTOR_MISS) {		///////////////////////////myedit highlight: check if anywhere else need miss status
     	assert(m_config.m_cache_type == SECTOR);
     	((sector_cache_block*)m_lines[idx])->allocate_sector( time, mask );
     }
 
-    m_lines[idx]->fill(time, mask, predicted); ////////myedit AMC
+    m_lines[idx]->fill(time, mask, predicted); ////////myedit AMC //////////myedit highlight: when using sector cache, predicted is only set for one sector.
     fill_count++; ////////myedit AMC
 }
 
@@ -1343,14 +1343,18 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time){
 					//fflush (stdout);
 
 				m_tag_array->truncate_float(mf);	//////////////truncate happens before fill
+				/////////myedit highlight: we simply truncate the real value here before the fill to mimic the truncation happened in the DRAM. Timing changes have been reflected elsewhere.
+				/////////myedit highlight: we can also implement the energy and error tagging for truncation here.
 			}
 
-			/////////////////////////myedithighlight: need different implementation now
+			////////myedithighlight: fill using different implementation now
+
+			///////////////////////////////m_tag_array->fill(e->second.m_cache_index,time);
 			//m_tag_array->fill(e->second.m_cache_index, time,
 			//		mf->is_approximated());	////////myedit amc  ///////////myeditDSN: both l1 and l2 are marked correctly with prediction status.
 
-			m_tag_array->fill(e->second.m_cache_index,time,mf);
-			////////myedithighlight: need different implementation now
+			m_tag_array->fill(e->second.m_cache_index,time,mf,mf->is_approximated());//////////////myedit highlight: this function only fills. allocation is done beforehand.
+			////////myedithighlight: fill using different implementation now
 
 		} else if (m_config.m_alloc_policy == ON_FILL) {
 
@@ -1362,29 +1366,24 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time){
 				m_tag_array->truncate_float(mf);
 			}
 
-			////////myedithighlight: need different implementation now
+			////////myedithighlight: fill using different implementation now
+
+			///////////////////////////////m_tag_array->fill(e->second.m_block_addr,time);
 			//m_tag_array->fill(e->second.m_block_addr, time,
 			//		mf->is_approximated());	////////myedit amc  ///////////myeditDSN: both l1 and l2 are marked correctly with prediction status.
 
-			m_tag_array->fill(e->second.m_block_addr,time,mf);
+			m_tag_array->fill(e->second.m_block_addr,time,mf,mf->is_approximated());//////////////myedit highlight: this function allocates and fills.
 
 			if(m_config.is_streaming()){
-				m_tag_array->remove_pending_line(mf);
+				m_tag_array->remove_pending_line(mf);///////myedit highlight: only added here: in send_read_request(
+				////////////////////////////////////////////if(m_config.is_streaming() && m_config.m_cache_type == SECTOR){ m_tag_array->add_pending_line(mf); }
+				/////////////////////////maybe it is used to generate sector misses when the line has not been allocated yet for the streaming cache where the on-fill policy is used.
 			}
-			////////myedithighlight: need different implementation now
+			////////myedithighlight: fill using different implementation now
 		} else {
 
 			abort();
 		}
-
-
-	    if ( m_config.m_alloc_policy == ON_MISS )
-	        m_tag_array->fill(e->second.m_cache_index,time,mf);
-	    else if ( m_config.m_alloc_policy == ON_FILL ) {
-	        m_tag_array->fill(e->second.m_block_addr,time,mf);
-	        if(m_config.is_streaming())
-	        	m_tag_array->remove_pending_line(mf);
-	    }else abort();
 
 	} else {////////do not fill if it is approximated. (on_fill makes sure it's not allocated and reserved forever.)
 
@@ -1819,12 +1818,12 @@ data_cache::wr_miss_wa_lazy_fetch_on_read( new_addr_type addr,
 
 					if(m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
 							&& evicted.is_predicted == 1){ ////////////////////only l2 need to do the copy from cache space to global space
-						/////////////////myedit highlight: for a fetch-on-write cache, it does not have the modified-words mask, therefore, whole cache line must be written back to the dram.
-						////////////////////////////////// however, for our favor, we can assume that it does have the modified-words mask, and can switch to write-validate mode.
-						////////////////////////////////// just that it uses the fetch-on-write to avoid the unreadable lines when read hit.
-						////////////////////////////////// if that is the case, then the following code to write the modified predicted line back to the dram when evicted is not required.
-						////////////////////////////////// this is because in st_impl( in instructions.cc, the modified words are written to both cache and global space already.
-						////////////////////////////////// so if we only write according to the modified-words mask, copying both the modified part and the remaining predicted part is unnecessary.
+					///////////////////myedit highlight: for a fetch-on-write cache (gtx480), it does not have the modified-words mask, therefore, whole cache line must be written back to the dram.
+					//////////////////////////////////// however, for our favor, we can assume that it does have the modified-words mask, and can switch to write-validate mode (titanx).
+					//////////////////////////////////// just that it uses the fetch-on-write to avoid the unreadable lines when read hit.
+					//////////////////////////////////// if that is the case, then the following code to write the modified predicted line back to the dram when evicted is not required.
+					//////////////////////////////////// this is because in st_impl( in instructions.cc, the modified words are written to both cache and global space already.
+					//////////////////////////////////// so if we only write according to the modified-words mask, copying both the modified part and the remaining predicted part is unnecessary.
 
 						/*
 						/////////////////////////////read from cache space
@@ -1937,7 +1936,47 @@ data_cache::rd_miss_base( new_addr_type addr,
             mem_fetch *wb = m_memfetch_creator->alloc(evicted.m_block_addr,
                 m_wrbk_type,evicted.m_modified_size,true);
         send_write_request(wb, WRITE_BACK_REQUEST_SENT, time, events);
-    }
+
+		////////////myeditDSN
+		////////////////////////////////here we only cover the l2 to dram case, because l1 is using we. (we only need to fix l1 if l1 uses wb)
+
+			if(m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
+					&& evicted.is_predicted == 1){ ////////////////////only l2 need to do the copy from cache space to global space
+				///////////////////myedit highlight: for a fetch-on-write cache (gtx480), it does not have the modified-words mask, therefore, whole cache line must be written back to the dram.
+				//////////////////////////////////// however, for our favor, we can assume that it does have the modified-words mask, and can switch to write-validate mode (titanx).
+				//////////////////////////////////// just that it uses the fetch-on-write to avoid the unreadable lines when read hit.
+				//////////////////////////////////// if that is the case, then the following code to write the modified predicted line back to the dram when evicted is not required.
+				//////////////////////////////////// this is because in st_impl( in instructions.cc, the modified words are written to both cache and global space already.
+				//////////////////////////////////// so if we only write according to the modified-words mask, copying both the modified part and the remaining predicted part is unnecessary.
+
+				/*
+				/////////////////////////////read from cache space
+				mem_fetch *data = wb;
+				char * mydata = new char[data->get_data_size()];
+				new_addr_type address_limit;
+
+				address_limit = data->get_addr() + data->get_data_size();
+
+				if (address_limit <= 0x100000000) {
+					/////////////////////////////read from cache space
+					((memory_space_impl<8 * 1024> *) cache_memory)->read(
+								(data->get_addr() >> 7) << 7, data->get_data_size(), mydata);
+
+					/////////////////////////////write to global space
+					((memory_space_impl<8 * 1024> *) global_memory)->write_1(
+							(data->get_addr() >> 7) << 7, data->get_data_size(), mydata);
+
+				} else {
+					printf("out of memory bound of 4gb\n");
+				}
+
+				delete[] mydata;
+				/////////////////////////////write to global space
+				*/
+			}
+		////////////myeditDSN
+
+        }
         return MISS;
     }
         return RESERVATION_FAIL;
@@ -2058,6 +2097,31 @@ data_cache::access( new_addr_type addr,
     return access_status;
 }
 
+//////////////myeditpredictor
+/*
+void tag_array::allocate_and_fill_prediction(unsigned index, unsigned time, new_addr_type addr) {  //////////////myedit highlight: obsolete
+	m_lines[index].allocate(m_config.tag(addr), m_config.block_addr(addr),
+			time);
+	m_lines[index].fill_predicted(time);
+
+	assert(m_lines[index].m_status != MODIFIED);
+
+	m_access++;
+	shader_cache_access_log(m_core_id, m_type_id, 0); // log accesses to cache
+}
+*/
+
+/////////////myedit highlight: using a different implementation
+/////////////myedit highlight: cache_block_t *m_lines; has been changed to cache_block_t **m_lines;
+unsigned tag_array::is_predicted(unsigned index, mem_access_sector_mask_t sector_mask) {
+
+	////////if(config.m_cache_type == SECTOR)
+	//return m_lines[index]->is_predicted;
+	return m_lines[index]->is_predicted(sector_mask);
+}
+//////////////myeditpredictor
+
+/*
 /// This is meant to model the first level data cache in Fermi.
 /// It is write-evict (global) or write-back (local) at the
 /// granularity of individual blocks (Set by GPGPU-Sim configuration file)
@@ -2082,6 +2146,165 @@ l2_cache::access( new_addr_type addr,
 {
     return data_cache::access( addr, mf, time, events );
 }
+*/
+
+enum cache_request_status
+l1_cache::access( new_addr_type addr,
+                  mem_fetch *mf,
+                  unsigned time,
+                  std::list<cache_event> &events )
+{
+		//////////////myeditDSN: process l1 hit approx
+		/////note: which space to write to for writes: wb: first write to cache space, then global space; wt: write to both cache space and global space; we: write to global space directly.
+		////////places to change for write: write op (for read after write) & memory writes (for eviction policies)
+		////////write op: write to both cache and global; L2 writeback: predicted: write from cache to global, accurate: do not write from cache to global.
+		////////check: is is_predicted correctly set when read?
+		///////can we prevent approximate data from being written to the memory? we, wt could, wb has to change accurate to approx in global space.
+		/////is there read for cache write-misses for we, wt or wb? if so, do they have to write to lower levels in 128 bytes chunks?
+		/////what is the write mf size? decided by memory_coalescing_arch_13_reduce_and_send(, 64 or 128.
+		/////but since no read is done before write when write miss, actually the size should be the size of the changed part.
+		////////////what does write hit reserved do? write request itself never get registered in the MSHR or reserve any cache block. so the reserved block hit is allocated for the read.
+		/////it is treated indifferently as write miss (send write directly). therefore, it is not clear what will happen if the read reply is already on its way back when sending the write.
+		/////key: check when write hit or when write miss evict, if the whole chunk is brought down or not.
+		/////so wb has to write the entire chunk. we and wt's send_write_request(, if can only send the changed, then sending the whole chunk can be avoided.
+		/////If it is a hit at L2, then write evict does not need to send the whole chunk. If it is a miss at L2, then write evict also does not need to send the whole chunk.
+		//////////////todo: 1. do nothing for write miss. ##ok 2. in write op write to both cache and global space. ##ok 3. do nothing for wt, we. ##ok
+		////////////////////4. copy from cache space to global space for wb evicted modified in L2. ##ok 5. make sure read low and write low (not needed if l1 uses we) change approx mark. ##ok
+		////////////////////6. re-execute for l1 hit-approx. ##ok
+		///////////ps: for downstream propagation, since L1 is we, we only need to copy from cache space to global space for approx evicted-write.
+		///////////////for upstream propagation, check if l1 and l2's marks are set correctly.
+		///////////The only case when a full cache line is written,
+		///////////is when a modified cache line is evicted under the write back policy (produced only by write hits, write misses do not produce Modified).
+		///////////Fortunately, l1 is not wb. If l1 uses wb, for the case of the generated write-back writes from l1, l2 has to mark their prediction status and
+		///////////copy from cache space to global space if l2 also sends them to the dram.
+		//////////////myedit bfloat: (when write approximate cache line back to dram, bfloat seems to be similar as lmc)
+		//////////////When error is caused in L1, we should use the same number of L1 cache spaces as the number of SMs.
+		//////////////When using two separate cache spaces for both L1 and L2, st_impl does not need to write to L1 since it is write evict. And st_impl always write to global space.
+		//////////////st_impl should also directly write to L2, indicating that write evict always write directly to L2.
+		//////////////However, read accurate from L2 or DRAM should use global space (do nothing), read approx from L2 should redo with L2 space.
+		//////////////Read accurate + inject_error_L1 from L2 or DRAM should copy from global to L1 space and inject error,
+		//////////////read approx + inject_error_L1 from L2 should copy from L2 space to L1 space and inject error.
+
+		////////////myedit highlight: we need to consider the sector hit and sector thread correspondance cases
+		///////////////////////////// we do redo with thread correspondance; do we now need to copy 32B instead of 128B?
+		///////////////////////////// we do not need to. currently we do not bring any additional data in the cache line back to the dram. only the changed part is written back.
+		///////////////////////////// therefore, it does not matter if we truncate and bring the whole cache line to the cache space or not.
+		///////////////////////////// However, we can do that to optimize for performance. Even if we have multiple sector merging and truncation schemes, they can only work on their own 32B.
+		////////////myedit highlight: we need to compare the performance of sector vs non-secotr case.
+		///////////////////////////// check difference involving m_lines, and sector_mask.
+		///////////////////////////// is there difference involving SECTOR_MISS and MISS? not here.
+		///////////////////////////// is there difference between SECTOR_HIT and HIT? no.
+		////////////myedit highlight: question: how cudaMalloc in libcuda/cuda_runtime_api.cc is used by the application's code (how is it compiled with nvcc, is it used in ptx or binary?)?
+		////////////todo: do a sanity check and compare the performance of sector vs non-secotr case.
+
+		enum cache_request_status access_status = data_cache::access(addr, mf, time, events);
+
+		if (access_status == HIT && mf->get_access_type() == GLOBAL_ACC_R ) { //////////hit a predicted data, then redo the load with data from cache space
+
+			//////////get cache_index
+			new_addr_type block_addr = m_config.block_addr(addr);
+			unsigned cache_index = (unsigned) -1;
+
+			///////////////////myedit highlight: new implementation
+			///////enum cache_request_status probe( new_addr_type addr, unsigned &idx, mem_fetch* mf, bool probe_mode=false ) const;
+			///////enum cache_request_status probe( new_addr_type addr, unsigned &idx, mem_access_sector_mask_t mask, bool probe_mode=false, mem_fetch* mf = NULL ) const;
+			//m_tag_array->probe(	block_addr, cache_index );
+			m_tag_array->probe(	block_addr, cache_index, mf);//////////the only purpose of this is to get cache_index from block_addr
+			///////////////////myedit highlight: new implementation
+
+			if ( m_tag_array->is_predicted(cache_index, mf->get_access_sector_mask() ) == 1) {
+
+				if (redo_in_l1) {
+
+					actual_redo++;
+
+					unsigned is_ld = 1;
+					for (unsigned t = 0; t < 32; t++) {
+
+						unsigned data_starting_index_of_thread_in_line =
+								(mf->get_access_thread_correspondance())[t]; /////data starting indices that belong to this line and belong to this warp
+
+						////////////////myedit highlight: it means this thread (id 0 - 31) is using data within this mf (which is ready in the cache space).
+						////////////////check: is all marked predicted data ready in the cache space before here?
+						if (data_starting_index_of_thread_in_line > 0) {
+							if ( mf->get_inst().active(t) ) { ////////////which threads are requesting this line? must redo accordingly.
+
+								///////////////////myedit highlight: we only redo with threads in this warp and using this cache line.
+								//////////////////////////////////// or say we only redo with data in this approximated cache line and used by this warp.
+								///////////////////check: could it be possible that access_thread_correspondance() record the threads in another warp?
+								unsigned tid = 32 * ( mf->get_inst().warp_id() ) + t; ////////////////////myquestion:is tid local to the CTA?
+								is_ld = m_core->m_thread[tid]->ptx_is_ld_at_pc( mf->get_pc() ); ///////////////only if this instruction is ld that it can be used to approximate
+
+								if (is_ld == 0) {
+									break;
+								}
+							} /////end of: if (mf->get_inst().active(thread_of_warp_in_line - 1))
+						} /////end of: if (thread_of_warp_in_line > 0)
+					} /////end of: for (unsigned t = 0; t < 32; t++)
+
+					if (is_ld == 1) {
+
+						for (unsigned t = 0; t < 32; t++) {
+
+							unsigned data_starting_index_of_thread_in_line = /////data indices that belong to this line and belong to this warp
+									(mf->get_access_thread_correspondance())[t];
+
+							if (data_starting_index_of_thread_in_line > 0) { ///////////0 means null, and the real id is: thread_of_warp_in_line - 1
+
+								if ( mf->get_inst().active(t) ) { ////////////which threads are requesting this line? must redo accordingly. input range (0 - 31).
+
+									unsigned tid = 32 * ( mf->get_inst().warp_id() ) + t; ////////////////////myquestion:is tid local to the CTA?
+									m_core->m_thread[tid]->ptx_exec_ld_at_pc( mf->get_pc() ); /////redo load for this thread
+
+								} ////////////end of: if (mf->get_inst().active(thread_of_warp_in_line - 1))
+							} ////////end of: if (thread_of_warp_in_line > 0)
+						} ////////end of: for (unsigned t = 0; t < 32; t++)
+					} //////end of: if (is_ld == 1)
+				}/////////end of: if (redo_in_l1) {
+
+			} /////end of: if ( m_tag_array->is_predicted(cache_index, mf->get_access_sector_mask() ) == 1) {
+		}/////end of: if (access_status == HIT && mf->get_access_type() == GLOBAL_ACC_R ) {
+
+		return access_status;
+		//return data_cache::access(addr, mf, time, events);
+		//////////////myeditDSN: process l1 hit approx
+}
+
+
+
+enum cache_request_status
+l2_cache::access( new_addr_type addr,
+                  mem_fetch *mf,
+                  unsigned time,
+                  std::list<cache_event> &events )
+{
+	//////////////myeditDSN: process l2 hit approx
+	enum cache_request_status access_status = data_cache::access(addr, mf, time, events);
+
+	if (access_status == HIT && mf->get_access_type() == GLOBAL_ACC_R ) { //////////hit a predicted data, then return a predicted data to the higher level
+
+		//////////get cache_index
+		new_addr_type block_addr = m_config.block_addr(addr);
+		unsigned cache_index = (unsigned) -1;
+
+		///////////////////myedit highlight: new implementation
+		///////enum cache_request_status probe( new_addr_type addr, unsigned &idx, mem_fetch* mf, bool probe_mode=false ) const;
+		///////enum cache_request_status probe( new_addr_type addr, unsigned &idx, mem_access_sector_mask_t mask, bool probe_mode=false, mem_fetch* mf = NULL ) const;
+		//m_tag_array->probe(	block_addr, cache_index );
+		m_tag_array->probe(	block_addr, cache_index, mf);//////////the only purpose of this is to get cache_index from block_addr
+		///////////////////myedit highlight: new implementation
+
+		if (m_tag_array->is_predicted(cache_index, , mf->get_access_sector_mask() ) == 1) {
+			mf->set_approx(); //////////this mf is what will be pushed back to the l2_inct_queue.
+		}
+	}
+
+	return access_status;
+	//return data_cache::access(addr, mf, time, events);
+	//////////////myeditDSN: process l2 hit approx
+}
+
+
 
 /// Access function for tex_cache
 /// return values: RESERVATION_FAIL if request could not be accepted
@@ -2109,7 +2332,13 @@ enum cache_request_status tex_cache::access( new_addr_type addr, mem_fetch *mf,
         unsigned rob_index = m_rob.push( rob_entry(cache_index, mf, block_addr) );
         m_extra_mf_fields[mf] = extra_mf_fields(rob_index, m_config);
         mf->set_data_size(m_config.get_line_sz());
-        m_tags.fill(cache_index,time,mf); // mark block as valid
+
+        ///////////myedit highlight: a new implementation is used
+        //m_tags.fill(cache_index, time, 0); ////////myedit amc // mark block as valid
+        //m_tags.fill(cache_index,time,mf); // mark block as valid
+        m_tags.fill(cache_index,time,mf,0); // mark block as valid
+        ///////////myedit highlight: a new implementation is used
+
         m_request_fifo.push(mf);
         mf->set_status(m_request_queue_status,time);
         events.push_back(cache_event(READ_REQUEST_SENT));

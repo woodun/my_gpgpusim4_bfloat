@@ -1511,6 +1511,10 @@ struct shader_core_config : public core_config
 
     int simt_core_sim_order; 
     
+	/////////////////////myedit prediction
+	unsigned bypassl1d;
+	/////////////////////myedit prediction
+
     unsigned smem_latency;
 
     unsigned mem2device(unsigned memid) const { return memid + n_simt_clusters; }

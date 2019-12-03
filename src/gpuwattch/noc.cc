@@ -25,13 +25,13 @@
  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.”
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.鈥�
  *
  ***************************************************************************/
 /********************************************************************
 *      Modified by:												   *
 *      Jingwen Leng, Univeristy of Texas, Austin                   *
-*      Syed Gilani, University of Wisconsin–Madison                *
+*      Syed Gilani, University of Wisconsin鈥揗adison                *
 *      Tayler Hetherington, University of British Columbia         *
 *      Ahmed ElTantawy, University of British Columbia             *
 ********************************************************************/
@@ -147,7 +147,7 @@ void NoC ::init_link_bus(double link_len_)
 	area.set_area(area.get_area()+ link_bus_tot_per_Router.area.get_area()* nocdynp.total_nodes);
 	link_bus_exist = true;
 }
-void NoC::computeEnergy(bool is_tdp)
+void NoC::computeEnergy(bool is_tdp) //myedit: mark
 {
 	//power_point_product_masks
 	double pppm_t[4]    = {1,1,1,1};

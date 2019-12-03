@@ -121,7 +121,7 @@ private:
     double init_inst_val;
     std::vector<double> samples;
     std::vector<double> samples_counter;
-    std::vector<double> pwr_counter;
+    std::vector<double> pwr_counter; ///////myedit not used anywhere, just for sanity checks?
 
     char *xml_filename;
     char *g_power_filename;

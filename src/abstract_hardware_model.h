@@ -272,6 +272,12 @@ public:
    unsigned get_uid() const { return m_uid; }
    std::string name() const;
 
+	//////////////////myedit predictor
+	std::list<class ptx_thread_info *> &active_threads() {
+		return m_active_threads;
+	}
+	//////////////////myedit predictor
+
    std::list<class ptx_thread_info *> &active_threads() { return m_active_threads; }
    class memory_space *get_param_memory() { return m_param_mem; }
 
@@ -579,6 +585,13 @@ public:
     void  memcpy_gpu_to_gpu( size_t dst, size_t src, size_t count );
     
     class memory_space *get_global_memory() { return m_global_mem; }
+
+	/////////////myedit predictor
+	class memory_space *get_cache_memory() {
+		return m_cache_mem;
+	}
+	/////////////myedit predictor
+
     class memory_space *get_tex_memory() { return m_tex_mem; }
     class memory_space *get_surf_memory() { return m_surf_mem; }
 
@@ -625,6 +638,10 @@ public:
 protected:
     const gpgpu_functional_sim_config &m_function_model_config;
     FILE* ptx_inst_debug_file;
+
+	/////////////myedit predictor
+	class memory_space *m_cache_mem;
+	/////////////myedit predictor
 
     class memory_space *m_global_mem;
     class memory_space *m_tex_mem;
@@ -763,6 +780,9 @@ public:
        m_req_size = size;
        m_write = wr;
    }
+
+   ////////////////myedit highlight: adding set_atomic and set_correspondance
+   /*
    mem_access_t( mem_access_type type, 
                  new_addr_type address, 
                  unsigned size, 
@@ -778,6 +798,30 @@ public:
       m_req_size = size;
       m_write = wr;
    }
+   */
+
+   mem_access_t( mem_access_type type,
+                 new_addr_type address,
+                 unsigned size,
+                 bool wr,
+                 const active_mask_t &active_mask,
+                 const mem_access_byte_mask_t &byte_mask,
+				 const mem_access_sector_mask_t &sector_mask,
+				 unsigned set_atomic, std::vector<unsigned> set_correspondance)
+    : m_warp_mask(active_mask), m_byte_mask(byte_mask), m_sector_mask(sector_mask)
+   {
+      init();
+      m_type = type;
+      m_addr = address;
+      m_req_size = size;
+      m_write = wr;
+
+		////////////////////////////myedit prediction
+		is_atomic = set_atomic;
+		thread_correspondance = set_correspondance;
+		////////////////////////////myedit prediction
+   }
+   ////////////////myedit highlight: adding set_atomic and set_correspondance
 
    new_addr_type get_addr() const { return m_addr; }
    void set_addr(new_addr_type addr) {m_addr=addr;}
@@ -805,13 +849,31 @@ public:
        }
    }
 
+	////////////////////////////myedit prediction
+	unsigned is_access_atomic() {
+		return is_atomic;
+	}
+	std::vector<unsigned> get_thread_correspondance() {
+		return thread_correspondance;
+	}
+	////////////////////////////myedit prediction
+
 private:
    void init() 
    {
       m_uid=++sm_next_access_uid;
       m_addr=0;
       m_req_size=0;
+
+		////////////////////////////myedit prediction
+		thread_correspondance = std::vector<unsigned>(32, 0);
+		////////////////////////////myedit prediction
    }
+
+	////////////////////////////myedit prediction
+	unsigned is_atomic;
+	std::vector<unsigned> thread_correspondance;
+	////////////////////////////myedit prediction
 
    unsigned      m_uid;
    new_addr_type m_addr;     // request address
@@ -1030,6 +1092,7 @@ public:
 			}	
 		}
     }   
+
     struct transaction_info {
         std::bitset<4> chunks; // bitmask: 32-byte chunks accessed
         mem_access_byte_mask_t bytes;
@@ -1041,7 +1104,18 @@ public:
                  return true;
            return false;
         }
+
+		////////////////////////////myedit prediction
+		transaction_info() {
+			thread_correspondance = std::vector<unsigned>(32, 0);
+		}
+
+		std::vector<unsigned> thread_correspondance;
+		unsigned is_atomic;
+		////////////////////////////myedit prediction
     };
+
+
 
     void generate_mem_accesses();
     void memory_coalescing_arch( bool is_write, mem_access_type access_type );
@@ -1239,11 +1313,20 @@ class core_t {
         void or_reduction(unsigned ctaid, unsigned barid, bool value) { reduction_storage[ctaid][barid] |= value; }
         void popc_reduction(unsigned ctaid, unsigned barid, bool value) { reduction_storage[ctaid][barid] += value;}
         unsigned get_reduction_value(unsigned ctaid, unsigned barid) {return reduction_storage[ctaid][barid];}
+
+    	///////////////myedit predictor
+    	class ptx_thread_info ** m_thread;
+    	///////////////myedit predictor
+
     protected:
         class gpgpu_sim *m_gpu;
         kernel_info_t *m_kernel;
         simt_stack  **m_simt_stack; // pdom based reconvergence context for each warp
-        class ptx_thread_info ** m_thread;
+
+    	///////////////myedit predictor
+    	///class ptx_thread_info ** m_thread;
+    	///////////////myedit predictor
+
         unsigned m_warp_size;
         unsigned m_warp_count;
         unsigned reduction_storage[MAX_CTA_PER_SHADER][MAX_BARRIERS_PER_CTA];

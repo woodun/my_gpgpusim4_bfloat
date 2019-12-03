@@ -38,7 +38,13 @@
 #include <list>
 #include <stdio.h>
 
+////////////////////myedit bfloat
+//#include "gpu-cache.h"
+////////////////////myedit bfloat
 
+////////////////myeditCAA
+extern unsigned kernel_index;
+////////////////myeditCAA
 
 // constants for statistics printouts
 #define GPU_RSTAT_SHD_INFO 0x1
@@ -165,6 +171,67 @@ struct memory_config {
          // named dram timing options (unordered)
          option_parser_t dram_opp = option_parser_create(); 
 
+         //////////////////////myeditamc
+		option_parser_register(dram_opp, "truncate_enabled", OPT_UINT32,
+				&truncate_enabled, "is truncate enabled", "0");
+
+		option_parser_register(dram_opp, "approx_enabled", OPT_UINT32,
+				&approx_enabled, "is approx enabled", "0");
+
+		option_parser_register(dram_opp, "print_profile", OPT_UINT32,
+				&print_profile, "print profile info or not", "0");
+
+		option_parser_register(dram_opp, "redo_in_l1", OPT_UINT32,
+				&redo_in_l1, "redo in l1", "0");
+
+		option_parser_register(dram_opp, "always_fill", OPT_UINT32,
+				&always_fill, "always fill in l1 and l2", "0");
+
+		option_parser_register(dram_opp, "remove_all", OPT_UINT32,
+				&remove_all,
+				"remove all low locality requests regardless of whether it is approximable or not",
+				"0");
+
+		option_parser_register(dram_opp, "bypassl2d", OPT_UINT32,
+				&bypassl2d, "bypass l2d cache", "0");
+
+		option_parser_register(dram_opp, "coverage", OPT_UINT32,
+				&coverage, "coverage of approximation", "0");
+
+		option_parser_register(dram_opp, "threshold_bw", OPT_UINT32,
+				&threshold_bw, "threshold_bw", "0");
+
+		option_parser_register(dram_opp, "threshold_length", OPT_UINT32,
+				&threshold_length, "threshold_length for the pending to queue size to decide whether to truncate or not in the dynamic scheme", "0");
+
+		option_parser_register(dram_opp, "dynamic_on", OPT_UINT32,
+							&dynamic_on, "dynamically picking the e", "0");
+
+		option_parser_register(dram_opp, "reprofiling_cycles", OPT_UINT32,
+							&reprofiling_cycles, "cycles after which to redo bw profiling", "0");
+
+		option_parser_register(dram_opp, "profiling_cycles_bw", OPT_UINT32,
+										&profiling_cycles_bw, "profiling window size for bw", "0");
+
+		option_parser_register(dram_opp, "distributed_scheduling", OPT_UINT32,
+										&distributed_scheduling, "scheduling is distributed across each memory controller or not", "0");
+
+		option_parser_register(dram_opp, "truncate_ratio", OPT_UINT32,
+										&default_truncate_ratio, "default truncation ratio", "0");
+
+		option_parser_register(dram_opp, "truncation_scenario", OPT_UINT32,
+										&truncation_scenario, "from what and truncate to what?", "0");
+
+		option_parser_register(dram_opp, "dbi_toggle", OPT_UINT32,
+										&dbi_toggle, "dbi_toggle", "0");
+
+		option_parser_register(dram_opp, "energy_profiling", OPT_UINT32,
+													&energy_profiling, "energy_profiling", "0");
+
+		option_parser_register(dram_opp, "error_profiling", OPT_UINT32,
+													&error_profiling, "error_profiling", "0");
+		//////////////////////myeditamc
+
          option_parser_register(dram_opp, "nbk",  OPT_UINT32, &nbk,   "number of banks", ""); 
          option_parser_register(dram_opp, "CCD",  OPT_UINT32, &tCCD,  "column to column delay", ""); 
          option_parser_register(dram_opp, "RRD",  OPT_UINT32, &tRRD,  "minimal delay between activation of rows in different banks", ""); 
@@ -248,6 +315,30 @@ struct memory_config {
    unsigned tCCDL;  //column to column delay when bank groups are enabled
    unsigned tRTPL;  //read to precharge delay when bank groups are enabled for GDDR5 this is identical to RTPS, if for other DRAM this is different, you will need to split them in two
 
+
+	//////////////////////myeditamc
+	unsigned truncate_enabled;
+	unsigned approx_enabled;
+	unsigned print_profile;
+	unsigned redo_in_l1; ///////////////myedit bfloat : make sure some of these are assigned to extern variables
+	unsigned distributed_scheduling; ///////////////myedit bfloat : make sure all these are assigned to global variables
+	unsigned always_fill;
+	unsigned remove_all;
+	unsigned bypassl2d;
+	unsigned coverage;
+	unsigned threshold_bw;
+	unsigned threshold_length;
+	unsigned dynamic_on;
+	unsigned reprofiling_cycles;
+	unsigned profiling_cycles_bw;
+	unsigned default_truncate_ratio; ///////////////myedit bfloat
+	unsigned truncation_scenario; ///////////////myedit bfloat
+	unsigned dbi_toggle;
+	unsigned energy_profiling;
+	unsigned error_profiling;
+	///////////////////////myeditamc
+
+
    unsigned tCCD;   //column to column delay
    unsigned tRRD;   //minimal time required between activation of rows in different banks
    unsigned tRCD;   //row to column delay - time required to activate a row before a read
@@ -296,6 +387,16 @@ struct memory_config {
 extern unsigned long long  gpu_sim_cycle;
 extern unsigned long long  gpu_tot_sim_cycle;
 extern bool g_interactive_debugger_enabled;
+
+////////////////////myeditpredictor
+extern unsigned long long gpu_tot_sim_insn;
+extern unsigned long long gpu_sim_insn;
+////////////////////myeditpredictor
+
+/////////////myedit amc
+extern unsigned long long temp_gpu_sim_insn;
+extern unsigned long long temp_gpu_sim_cycle;
+/////////////myedit amc
 
 class gpgpu_sim_config : public power_config, public gpgpu_functional_sim_config {
 public:
@@ -559,11 +660,14 @@ private:
 
 
 public:
-   unsigned long long  gpu_sim_insn;
-   unsigned long long  gpu_tot_sim_insn;
+	////////////////////myeditpredictor
+	//unsigned long long gpu_sim_insn;
+	////unsigned long long  gpu_tot_sim_insn;
+	////////////////////myeditpredictor
+
    unsigned long long  gpu_sim_insn_last_update;
    unsigned gpu_sim_insn_last_update_sid;
-   occupancy_stats gpu_occupancy;
+   occupancy_stats gpu_occupancy; ////////////////////myedit highlight: can grep this
    occupancy_stats gpu_tot_occupancy;
 
 

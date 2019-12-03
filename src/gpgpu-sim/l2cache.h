@@ -145,7 +145,12 @@ private:
 class memory_sub_partition
 {
 public:
-   memory_sub_partition( unsigned sub_partition_id, const struct memory_config *config, class memory_stats_t *stats );
+
+   //////////////myedit AMC
+   //memory_sub_partition( unsigned sub_partition_id, const struct memory_config *config, class memory_stats_t *stats );
+   memory_sub_partition( unsigned sub_partition_id, const struct memory_config *config, class memory_stats_t *stats, class memory_partition_unit* m_memory_partition_unit);
+   //////////////myedit AMC
+
    ~memory_sub_partition(); 
 
    unsigned get_id() const { return m_id; } 
@@ -189,6 +194,10 @@ public:
         m_L2cache->force_tag_access( addr, m_memcpy_cycle_offset + time, mask );
         m_memcpy_cycle_offset += 1;
    }
+
+   //////////////myedit AMC
+   class memory_partition_unit* m_partition;
+   //////////////myedit AMC
 
 private:
 // data

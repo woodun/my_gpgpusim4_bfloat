@@ -70,7 +70,11 @@ memory_partition_unit::memory_partition_unit( unsigned partition_id,
     m_sub_partition = new memory_sub_partition*[m_config->m_n_sub_partition_per_memory_channel]; 
     for (unsigned p = 0; p < m_config->m_n_sub_partition_per_memory_channel; p++) {
         unsigned sub_partition_id = m_id * m_config->m_n_sub_partition_per_memory_channel + p; 
-        m_sub_partition[p] = new memory_sub_partition(sub_partition_id, m_config, stats); 
+
+		////////////myedit AMC
+        //m_sub_partition[p] = new memory_sub_partition(sub_partition_id, m_config, stats);
+		m_sub_partition[p] = new memory_sub_partition(sub_partition_id,	m_config, stats, this);
+		////////////myedit AMC
     }
 }
 
@@ -308,10 +312,16 @@ void memory_partition_unit::print( FILE *fp ) const
     m_dram->print(fp); 
 }
 
-memory_sub_partition::memory_sub_partition( unsigned sub_partition_id, 
-                                            const struct memory_config *config,
-                                            class memory_stats_t *stats )
-{
+////////////myedit AMC
+//memory_sub_partition::memory_sub_partition(unsigned sub_partition_id,
+//		const struct memory_config *config, class memory_stats_t *stats) {
+memory_sub_partition::memory_sub_partition(unsigned sub_partition_id,
+		const struct memory_config *config, class memory_stats_t *stats,
+		class memory_partition_unit* m_memory_partition_unit) {
+
+	m_partition = m_memory_partition_unit;
+////////////myedit AMC
+
     m_id = sub_partition_id;
     m_config=config;
     m_stats=stats;
@@ -324,7 +334,8 @@ memory_sub_partition::memory_sub_partition( unsigned sub_partition_id,
     m_L2interface = new L2interface(this);
     m_mf_allocator = new partition_mf_allocator(config);
 
-    if(!m_config->m_L2_config.disabled())
+    //if(!m_config->m_L2_config.disabled())
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) ////////////myedit AMC
        m_L2cache = new l2_cache(L2c_name,m_config->m_L2_config,-1,-1,m_L2interface,m_mf_allocator,IN_PARTITION_L2_MISS_QUEUE);
 
     unsigned int icnt_L2;
@@ -352,23 +363,33 @@ memory_sub_partition::~memory_sub_partition()
 void memory_sub_partition::cache_cycle( unsigned cycle )
 {
     // L2 fill responses
-    if( !m_config->m_L2_config.disabled()) {
+    //if( !m_config->m_L2_config.disabled()) {
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) { ////////////myedit AMC
+
        if ( m_L2cache->access_ready() && !m_L2_icnt_queue->full() ) {
-           mem_fetch *mf = m_L2cache->next_access();
+           mem_fetch *mf = m_L2cache->next_access(); //////////////myedit highlight: this is the next fill response
            if(mf->get_access_type() != L2_WR_ALLOC_R){ // Don't pass write allocate read request back to upper level cache
 				mf->set_reply();
 				mf->set_status(IN_PARTITION_L2_TO_ICNT_QUEUE,gpu_sim_cycle+gpu_tot_sim_cycle);
 				m_L2_icnt_queue->push(mf);
-           }else{
+           }else{ ///myquestion: for write allocate miss why not set to be MODIFIED? ///myedit highlight: naive write-miss allocate does not have modified status, data already written through.
+        	   /////myedit highlight: for FETCH_ON_WRITE, it does set modified, block->set_modified_on_fill(true, mf->get_access_sector_mask());
+
         	    if(m_config->m_L2_config.m_write_alloc_policy == FETCH_ON_WRITE)
         	    {
         	    	mem_fetch* original_wr_mf = mf->get_original_wr_mf();
 					assert(original_wr_mf);
-					original_wr_mf->set_reply();
-					original_wr_mf->set_status(IN_PARTITION_L2_TO_ICNT_QUEUE,gpu_sim_cycle+gpu_tot_sim_cycle);
+					original_wr_mf->set_reply(); /////myedit highlight: just to set if it is READ_REPLY or WRITE_ACK. WRITE_ACK is used to: m_core->store_ack(mf); m_warp[warp_id].dec_store_req();
+					//////////////////////////////////maybe reply has to be set here because it set_modified_on_fill and just modified the cache line, but no write is sent to get reply from dram.
+
+					original_wr_mf->set_status(IN_PARTITION_L2_TO_ICNT_QUEUE,gpu_sim_cycle+gpu_tot_sim_cycle);///myedit highlight: IN_PARTITION_L2_TO_ICNT_QUEUE not used anywhere, why set here?
 					m_L2_icnt_queue->push(original_wr_mf);
         	    }
-				m_request_tracker.erase(mf);
+				m_request_tracker.erase(mf); //////myedit highlight: why other cases do not need to acknowledge? Or is it set elsewhere?
+				//////////////////////////////////////////////////// yes, it is set in hit: bool write_sent = was_write_sent(events); if(mf_next->get_inst().is_store() && !write_sent){
+				////////////////////also, for gpgpusim4, set_reply() for write hit in WB policy is newly added in shader.cc.
+				////////////////////for naive FETCH_ON_WRITE, maybe the reply is set at dram since both a write request and a read request are sent.
+
 				delete mf;
            }
        }
@@ -377,7 +398,10 @@ void memory_sub_partition::cache_cycle( unsigned cycle )
     // DRAM to L2 (texture) and icnt (not texture)
     if ( !m_dram_L2_queue->empty() ) {
         mem_fetch *mf = m_dram_L2_queue->top();
-        if ( !m_config->m_L2_config.disabled() && m_L2cache->waiting_for_fill(mf) ) {
+
+        //if ( !m_config->m_L2_config.disabled() && m_L2cache->waiting_for_fill(mf) ) {
+        if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d && m_L2cache->waiting_for_fill(mf)) { ////////////myedit AMC
+
             if (m_L2cache->fill_port_free()) {
                 mf->set_status(IN_PARTITION_L2_FILL_QUEUE,gpu_sim_cycle+gpu_tot_sim_cycle);
                 m_L2cache->fill(mf,gpu_sim_cycle+gpu_tot_sim_cycle+m_memcpy_cycle_offset);
@@ -392,15 +416,17 @@ void memory_sub_partition::cache_cycle( unsigned cycle )
     }
 
     // prior L2 misses inserted into m_L2_dram_queue here
-    if( !m_config->m_L2_config.disabled() )
+    //if( !m_config->m_L2_config.disabled() )
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) ////////////myedit AMC
        m_L2cache->cycle();
 
     // new L2 texture accesses and/or non-texture accesses
     if ( !m_L2_dram_queue->full() && !m_icnt_L2_queue->empty() ) {
         mem_fetch *mf = m_icnt_L2_queue->top();
-        if ( !m_config->m_L2_config.disabled() &&
-              ( (m_config->m_L2_texure_only && mf->istexture()) || (!m_config->m_L2_texure_only) )
-           ) {
+
+        //if ( !m_config->m_L2_config.disabled() && ( (m_config->m_L2_texure_only && mf->istexture()) || (!m_config->m_L2_texure_only) ) ) {
+        if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d && ((m_config->m_L2_texure_only && mf->istexture()) || (!m_config->m_L2_texure_only) ) ) { ////////////myedit AMC
+
             // L2 is enabled and access is for L2
             bool output_full = m_L2_icnt_queue->full(); 
             bool port_free = m_L2cache->data_port_free(); 
@@ -497,7 +523,9 @@ void memory_sub_partition::dram_L2_queue_push( class mem_fetch* mf )
 void memory_sub_partition::print_cache_stat(unsigned &accesses, unsigned &misses) const
 {
     FILE *fp = stdout;
-    if( !m_config->m_L2_config.disabled() )
+
+    //if( !m_config->m_L2_config.disabled() )
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) ////////////myedit AMC
        m_L2cache->print(fp,accesses,misses);
 }
 
@@ -513,7 +541,9 @@ void memory_sub_partition::print( FILE *fp ) const
                 fprintf(fp," <NULL mem_fetch?>\n");
         }
     }
-    if( !m_config->m_L2_config.disabled() )
+
+    //if( !m_config->m_L2_config.disabled() )
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) ////////////myedit AMC
        m_L2cache->display_state(fp);
 }
 
@@ -575,7 +605,8 @@ void gpgpu_sim::print_dram_stats(FILE *fout) const
 
 unsigned memory_sub_partition::flushL2() 
 { 
-    if (!m_config->m_L2_config.disabled()) {
+    //if (!m_config->m_L2_config.disabled()) {
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) { ////////////myedit AMC
         m_L2cache->flush(); 
     }
     return 0;   //TODO: write the flushed data to the main memory
@@ -583,7 +614,8 @@ unsigned memory_sub_partition::flushL2()
 
 unsigned memory_sub_partition::invalidateL2()
 {
-    if (!m_config->m_L2_config.disabled()) {
+    //if (!m_config->m_L2_config.disabled()) {
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) { ////////////myedit AMC
         m_L2cache->invalidate();
     }
     return 0;
@@ -716,25 +748,33 @@ void memory_sub_partition::set_done( mem_fetch *mf )
 }
 
 void memory_sub_partition::accumulate_L2cache_stats(class cache_stats &l2_stats) const {
-    if (!m_config->m_L2_config.disabled()) {
+
+    //if (!m_config->m_L2_config.disabled()) {
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) { ////////////myedit AMC
         l2_stats += m_L2cache->get_stats();
     }
 }
 
 void memory_sub_partition::get_L2cache_sub_stats(struct cache_sub_stats &css) const{
-    if (!m_config->m_L2_config.disabled()) {
+
+    //if (!m_config->m_L2_config.disabled()) {
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) { ////////////myedit AMC
         m_L2cache->get_sub_stats(css);
     }
 }
 
 void memory_sub_partition::get_L2cache_sub_stats_pw(struct cache_sub_stats_pw &css) const{
-    if (!m_config->m_L2_config.disabled()) {
+
+    //if (!m_config->m_L2_config.disabled()) {
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) { ////////////myedit AMC
         m_L2cache->get_sub_stats_pw(css);
     }
 }
 
 void memory_sub_partition::clear_L2cache_stats_pw() {
-    if (!m_config->m_L2_config.disabled()) {
+
+    //if (!m_config->m_L2_config.disabled()) {
+    if (!m_config->m_L2_config.disabled() && !m_config->bypassl2d) { ////////////myedit AMC
         m_L2cache->clear_pw();
     }
 }

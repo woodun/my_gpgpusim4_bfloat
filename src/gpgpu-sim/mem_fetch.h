@@ -119,7 +119,59 @@ public:
    mem_fetch* get_original_mf() { return original_mf; }
    mem_fetch* get_original_wr_mf()  { return original_wr_mf; }
 
+	////////////////////////////myedit prediction
+	unsigned is_access_atomic() {
+		return m_access.is_access_atomic();
+	}
+	std::vector<unsigned> get_access_thread_correspondance() {
+		return m_access.get_thread_correspondance();
+	}
+	////////////////////////////myedit prediction
+
+	/////////////////myedit AMC
+	void set_approx() {
+		is_approx = 1;
+	}
+
+	void reset_approx() {
+		is_approx = 0;
+	}
+
+	unsigned is_approximated() {
+		return is_approx;
+	}
+	/////////////////myedit AMC
+
+	////////////////myedit bfloat
+	void set_truncate_ratio(unsigned ratio) {
+		truncate_ratio = ratio;
+	}
+
+	unsigned get_truncate_ratio() {
+		return truncate_ratio;
+	}
+
+	void set_truncation_scenario(unsigned scenario) {
+		truncation_scenario = scenario;
+	}
+
+	unsigned get_truncation_scenario() {
+		return truncation_scenario;
+	}
+	////////////////myedit bfloat
+
 private:
+
+	/////////////////myedit AMC
+	unsigned is_approx;
+	/////////////////myedit AMC
+
+	////////////////myedit bfloat
+	unsigned truncate_ratio;
+	unsigned truncation_scenario;
+	////////////////myedit bfloat
+
+
    // request source information
    unsigned m_request_uid;
    unsigned m_sid;

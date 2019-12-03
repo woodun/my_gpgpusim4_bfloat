@@ -66,6 +66,10 @@ mem_fetch::mem_fetch( const mem_access_t &access,
    icnt_flit_size = config->icnt_flit_size;
    original_mf = m_original_mf;
    original_wr_mf = m_original_wr_mf;
+
+	/////////////////myedit AMC
+	is_approx = 0;
+	/////////////////myedit AMC
 }
 
 mem_fetch::~mem_fetch()

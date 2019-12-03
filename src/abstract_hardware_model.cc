@@ -172,6 +172,11 @@ void gpgpu_functional_sim_config::ptx_set_tex_cache_linesize(unsigned linesize)
    m_texcache_linesize = linesize;
 }
 
+////////////////myeditCAA
+unsigned char *global_memory = NULL;
+unsigned char *cache_memory = NULL;
+ ////////////////myeditCAA
+
 gpgpu_t::gpgpu_t( const gpgpu_functional_sim_config &config )
     : m_function_model_config(config)
 {
@@ -179,6 +184,13 @@ gpgpu_t::gpgpu_t( const gpgpu_functional_sim_config &config )
    
    m_tex_mem = new memory_space_impl<8192>("tex",64*1024);
    m_surf_mem = new memory_space_impl<8192>("surf",64*1024);
+
+   ////////////////myeditCAA
+   m_cache_mem = new memory_space_impl<8192>("cache",64*1024);
+
+   global_memory = (unsigned char*)(m_global_mem);
+   cache_memory = (unsigned char*)(m_cache_mem);
+   ////////////////myeditCAA
 
    m_dev_malloc=GLOBAL_HEAP_START; 
    checkpoint_option = m_function_model_config.get_checkpoint_option();
@@ -442,8 +454,16 @@ void warp_inst_t::generate_mem_accesses()
             for( unsigned i=0; i < data_size; i++ ) 
                 byte_mask.set(idx+i);
         }
-        for( a=accesses.begin(); a != accesses.end(); ++a ) 
-            m_accessq.push_back( mem_access_t(access_type,a->first,cache_block_size,is_write,a->second, byte_mask, mem_access_sector_mask_t()));
+
+        /////////////////////myedit highlight
+        //for( a=accesses.begin(); a != accesses.end(); ++a )
+        //    m_accessq.push_back( mem_access_t(access_type,a->first,cache_block_size,is_write,a->second, byte_mask, mem_access_sector_mask_t()));
+
+        for( a=accesses.begin(); a != accesses.end(); ++a ) {
+        	std::vector<unsigned> empty_correspondance(32, 0);
+            m_accessq.push_back( mem_access_t(access_type,a->first,cache_block_size,is_write,a->second,byte_mask, mem_access_sector_mask_t(), 0, empty_correspondance) );/////////////for tex_space and const_space only
+        }
+        /////////////////////myedit highlight
     }
 
     if ( space.get_type() == global_space ) {
@@ -519,6 +539,18 @@ void warp_inst_t::memory_coalescing_arch( bool is_write, mem_access_type access_
                 unsigned idx = (addr&127);
                 for( unsigned i=0; i < data_size_coales; i++ )
                     info.bytes.set(idx+i);
+
+                ////////////////////////////myedit prediction
+                ///////////////myedit highlight: we only need thread ids in info.active to redo instructions; do we need exact starting positions in this chunk of the involved thread ids as well?
+                //////////////////////////////// may be not since we only check: if (data_starting_index_of_thread_in_line > 0) { when redo,
+                //////////////////////////////// also we can get access address from thread ids with: new_addr_type addr = m_per_scalar_thread[thread].memreqaddr[access];
+                //////////////////////////////// but this can be kept for possible future convenience
+                info.thread_correspondance[thread] = idx + 1;//1 to 128, 0 means not set. //////////////myeditDSN
+                //info.thread_correspondance[idx/4] = thread + 1;//1 to 32, 0 means not set. //////////////myeditDSN error if multiple threads access the same data.
+                ////////////////////need only to record which thread is involved if address (idx offset) is not used (can get from ptx_exec_ld_at_pc somehow?).
+                ///////////and access addresses generated here are not even need for re-exection, because execute_warp_inst_t(inst); even happens before inst.generate_mem_accesses();.
+                //////just need bitset for thread ids per block.
+                ////////////////////////////myedit prediction
             }
         }
 
@@ -526,10 +558,14 @@ void warp_inst_t::memory_coalescing_arch( bool is_write, mem_access_type access_
         std::map< new_addr_type, transaction_info >::iterator t;
         for( t=subwarp_transactions.begin(); t !=subwarp_transactions.end(); t++ ) {
             new_addr_type addr = t->first;
-            const transaction_info &info = t->second;
+
+            ////////////////////////////myedit prediction
+            //const transaction_info &info = t->second;
+            transaction_info &info = t->second;
+            info.is_atomic = 0;
+            ////////////////////////////myedit prediction
 
             memory_coalescing_arch_reduce_and_send(is_write, access_type, info, addr, segment_size);
-
         }
     }
 }
@@ -614,12 +650,26 @@ void warp_inst_t::memory_coalescing_arch_atomic( bool is_write, mem_access_type 
        for( t_list=subwarp_transactions.begin(); t_list !=subwarp_transactions.end(); t_list++ ) {
            // For each block addr
            new_addr_type addr = t_list->first;
-           const std::list<transaction_info>& transaction_list = t_list->second;
 
-           std::list<transaction_info>::const_iterator t;
+           ////////////////////////////myedit prediction
+           //const std::list<transaction_info>& transaction_list = t_list->second;
+           std::list<transaction_info>& transaction_list = t_list->second;
+           ////////////////////////////myedit prediction
+
+           ////////////////////////////myedit prediction
+           //std::list<transaction_info>::const_iterator t;
+           std::list<transaction_info>::iterator t;
+           ////////////////////////////myedit prediction
+
            for(t=transaction_list.begin(); t!=transaction_list.end(); t++) {
                // For each transaction
-               const transaction_info &info = *t;
+
+               ////////////////////////////myedit prediction
+        	   //const transaction_info &info = *t;
+        	   transaction_info &info = *t;
+               info.is_atomic = 1;
+               ////////////////////////////myedit prediction
+
                memory_coalescing_arch_reduce_and_send(is_write, access_type, info, addr, segment_size);
            }
        }
@@ -675,7 +725,14 @@ void warp_inst_t::memory_coalescing_arch_reduce_and_send( bool is_write, mem_acc
            assert(lower_half_used && upper_half_used);
        }
    }
-   m_accessq.push_back( mem_access_t(access_type,addr,size,is_write,info.active,info.bytes, info.chunks) );
+
+
+   ////////////////////////////myedit prediction
+   //m_accessq.push_back( mem_access_t(access_type,addr,size,is_write,info.active,info.bytes) ); ///////////gpgpu3
+   //m_accessq.push_back( mem_access_t(access_type,addr,size,is_write,info.active,info.bytes, info.chunks) ); ///////////gpgpu4
+
+   m_accessq.push_back( mem_access_t(access_type,addr,size,is_write,info.active,info.bytes, info.chunks, info.is_atomic, info.thread_correspondance) );
+   ////////////////////////////myedit prediction
 }
 
 void warp_inst_t::completed( unsigned long long cycle ) const 

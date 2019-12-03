@@ -25,13 +25,13 @@
  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.”
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.鈥�
  *
  ***************************************************************************/
 /********************************************************************
 *      Modified by:												   *
 *      Jingwen Leng, Univeristy of Texas, Austin                   *
-*      Syed Gilani, University of Wisconsin–Madison                *
+*      Syed Gilani, University of Wisconsin鈥揗adison                *
 *      Tayler Hetherington, University of British Columbia         *
 *      Ahmed ElTantawy, University of British Columbia             *
 ********************************************************************/
@@ -480,7 +480,7 @@ MCFrontEnd::MCFrontEnd(ParseXML *XML_interface,InputParameter* interface_ip_, co
 }
 
 
-void DRAM::computeEnergy(bool is_tdp)
+void DRAM::computeEnergy(bool is_tdp) //myedit: mark
 {
 	if (is_tdp){
 		power.reset();

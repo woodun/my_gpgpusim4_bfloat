@@ -149,6 +149,7 @@ shader_core_ctx::shader_core_ctx( class gpgpu_sim *gpu,
                                          sched_config.find("warp_limiting") != std::string::npos ?
                                          CONCRETE_SCHEDULER_WARP_LIMITING:
                                          NUM_CONCRETE_SCHEDULERS;
+    ////////////////myedit highlight: scheduler changes are not moved.
     assert ( scheduler != NUM_CONCRETE_SCHEDULERS );
     
     for (int i = 0; i < m_config->gpgpu_num_sched_per_core; i++) {
@@ -1513,7 +1514,16 @@ void shader_core_ctx::warp_inst_complete(const warp_inst_t &inst)
 	  m_stats->m_num_sim_insn[m_sid] += inst.active_count();
 
   m_stats->m_num_sim_winsn[m_sid]++;
-  m_gpu->gpu_sim_insn += inst.active_count();
+
+  ///////////////////myeditpredictor
+  //m_gpu->gpu_sim_insn += inst.active_count();
+  gpu_sim_insn += inst.active_count();
+  ///////////////////myeditpredictor
+
+	/////////////myeditamc
+	temp_gpu_sim_insn += inst.active_count();
+	/////////////myeditamc
+
   inst.completed(gpu_tot_sim_cycle + gpu_sim_cycle);
 }
 
@@ -1789,7 +1799,10 @@ bool ldst_unit::memory_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_rea
    const mem_access_t &access = inst.accessq_back();
 
    bool bypassL1D = false; 
-   if ( CACHE_GLOBAL == inst.cache_op || (m_L1D == NULL) ) {
+
+   //if (CACHE_GLOBAL == inst.cache_op || (m_L1D == NULL) ) {
+   if (CACHE_GLOBAL == inst.cache_op || (m_L1D == NULL) || m_config->bypassl1d ) { ///////////myedit highlight: added || m_config->bypassl1d
+
        bypassL1D = true; 
    } else if (inst.space.is_global()) { // global memory access 
        // skip L1 cache if the option is enabled
@@ -2106,9 +2119,15 @@ ldst_unit::ldst_unit( mem_fetch_interface *icnt,
           stats, 
           sid,
           tpc );
-    if( !m_config->m_L1D_config.disabled() ) {
+
+    //if( !m_config->m_L1D_config.disabled() ) {
+    if (!m_config->m_L1D_config.disabled() && !m_config->bypassl1d) { ///////myedit AMC
+
         char L1D_name[STRSIZE];
         snprintf(L1D_name, STRSIZE, "L1D_%03d", m_sid);
+
+        ///////////////////////myedit predictor
+        /*
         m_L1D = new l1_cache( L1D_name,
                               m_config->m_L1D_config,
                               m_sid,
@@ -2116,6 +2135,11 @@ ldst_unit::ldst_unit( mem_fetch_interface *icnt,
                               m_icnt,
                               m_mf_allocator,
                               IN_L1D_MISS_QUEUE );
+        */
+		m_L1D = new l1_cache(core, L1D_name, m_config->m_L1D_config, m_sid,
+				get_shader_normal_cache_id(), m_icnt, m_mf_allocator,
+				IN_L1D_MISS_QUEUE);
+        ///////////////////////myedit predictor
 
         if(m_config->m_L1D_config.l1_latency > 0)
 	    {
@@ -2240,7 +2264,7 @@ void ldst_unit::writeback()
             }
             break;
         case 3: // global/local
-            if( m_next_global ) {
+            if( m_next_global ) { //////////////////////////////////myedit highlight: L1D is bypassed
                 m_next_wb = m_next_global->get_inst();
                 if( m_next_global->isatomic() ) 
                     m_core->decrement_atomic_count(m_next_global->get_wid(),m_next_global->get_access_warp_mask().count());
@@ -2250,9 +2274,62 @@ void ldst_unit::writeback()
             }
             break;
         case 4: 
-            if( m_L1D && m_L1D->access_ready() ) {
+            if( m_L1D && m_L1D->access_ready() ) { //////////////////////////////////myedit highlight: L1D is not bypassed
                 mem_fetch *mf = m_L1D->next_access();
-                m_next_wb = mf->get_inst();
+
+				//////////////myeditDSN
+				if (mf->is_approximated()) { /////////redo with approximate data only.
+
+					if (redo_in_l1) {
+
+						actual_redo++;
+
+						unsigned is_ld = 1;
+						for (unsigned t = 0; t < 32; t++) {
+
+							unsigned data_starting_index_of_thread_in_line =
+									(mf->get_access_thread_correspondance())[t]; /////data starting indices that belong to this line and belong to this warp
+
+							if (data_starting_index_of_thread_in_line > 0) {
+								if ( mf->get_inst().active(t) ) { ////////////which threads are requesting this line? must redo accordingly.
+
+									unsigned tid = 32 * ( mf->get_inst().warp_id() ) + t; ////////////////////myquestion:is tid local to the CTA?
+									is_ld = m_core->m_thread[tid]->ptx_is_ld_at_pc( mf->get_pc() ); ///////////////only if this instruction is ld that it can be used to approximate
+
+									if (is_ld == 0) {
+										break;
+									}
+								} /////end of: if (mf->get_inst().active(thread_of_warp_in_line - 1))
+							} /////end of: if (thread_of_warp_in_line > 0)
+						} /////end of: for (unsigned t = 0; t < 32; t++)
+
+						if (is_ld == 1) {
+
+							if ( mf->get_access_type() == GLOBAL_ACC_R ) { //////////hit a predicted data, then redo the load with data from cache space
+
+								for (unsigned t = 0; t < 32; t++) {
+
+									unsigned data_starting_index_of_thread_in_line = /////data indices that belong to this line and belong to this warp
+											(mf->get_access_thread_correspondance())[t];
+
+									if (data_starting_index_of_thread_in_line > 0) { ///////////0 means null, and the real id is: thread_of_warp_in_line - 1
+
+										if ( mf->get_inst().active(t) ) { ////////////which threads are requesting this line? must redo accordingly.
+
+											unsigned tid = 32 * ( mf->get_inst().warp_id() ) + t; ////////////////////myquestion:is tid local to the CTA?
+											m_core->m_thread[tid]->ptx_exec_ld_at_pc( mf->get_pc() ); /////redo load
+
+										} ////////////end of: if (mf->get_inst().active(thread_of_warp_in_line - 1))
+									} ////////end of: if (thread_of_warp_in_line > 0)
+								} ////////end of: for (unsigned t = 0; t < 32; t++)
+							} //////end of:if ( mf->get_access_type() == GLOBAL_ACC_R )
+						} //////end of: if (is_ld == 1)
+					}/////////end of: if (redo_in_l1) {
+
+				} /////end of: if (mf->is_approximated())
+				//////////////myeditDSN
+
+                m_next_wb = mf->get_inst(); //////////////one writeback is just one access of this instruction. ////myedit highlight: warp_inst_t m_next_wb;
                 delete mf;
                 serviced_client = next_client; 
             }
@@ -2329,7 +2406,10 @@ void ldst_unit::cycle()
                assert( !mf->get_is_write() ); // L1 cache is write evict, allocate line on load miss only
 
                bool bypassL1D = false; 
-               if ( CACHE_GLOBAL == mf->get_inst().cache_op || (m_L1D == NULL) ) {
+
+               //if ( CACHE_GLOBAL == mf->get_inst().cache_op || (m_L1D == NULL) ) {
+               if (CACHE_GLOBAL == mf->get_inst().cache_op || (m_L1D == NULL) || m_config->bypassl1d) { ///////////myedit prediction
+
                    bypassL1D = true; 
                } else if (mf->get_access_type() == GLOBAL_ACC_R || mf->get_access_type() == GLOBAL_ACC_W) { // global memory access 
                    if (m_core->get_config()->gmem_skip_L1D)
@@ -2552,7 +2632,9 @@ void gpgpu_sim::shader_print_cache_stats( FILE *fout ) const{
     }
 
     // L1D
-    if(!m_shader_config->m_L1D_config.disabled()){
+    //if(!m_shader_config->m_L1D_config.disabled()){
+    if(!m_shader_config->m_L1D_config.disabled() && !m_shader_config->bypassl1d) {	///////myedit AMC
+
         total_css.clear();
         css.clear();
         fprintf(fout, "L1D_cache:\n");
@@ -2810,7 +2892,9 @@ void ldst_unit::print(FILE *fout) const
     }
     m_L1C->display_state(fout);
     m_L1T->display_state(fout);
-    if( !m_config->m_L1D_config.disabled() )
+
+    //if( !m_config->m_L1D_config.disabled() )
+    if (!m_config->m_L1D_config.disabled() && !m_config->bypassl1d) ///////myedit AMC
     	m_L1D->display_state(fout);
     fprintf(fout,"LD/ST response FIFO (occupancy = %zu):\n", m_response_fifo.size() );
     for( std::list<mem_fetch*>::const_iterator i=m_response_fifo.begin(); i != m_response_fifo.end(); i++ ) {

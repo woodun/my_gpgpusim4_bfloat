@@ -38,7 +38,25 @@
 #include "addrdec.h"
 #include <iostream>
 
+//////////////////myedit amc
+#include "../cuda-sim/memory.h"//include memory_space_impl.
+extern unsigned char *global_memory; // Pointer to memory image of data, to the object of global memory.
+extern unsigned char *cache_memory;
+//////////////////myedit amc
+
 #define MAX_DEFAULT_CACHE_SIZE_MULTIBLIER 4
+
+////////////////myedit bfloat
+//#include "dram_sched.h"
+
+extern unsigned print_profile;
+extern unsigned redo_in_l1;
+extern unsigned always_fill;
+extern unsigned bypassl2d;
+
+extern unsigned actual_redo;
+extern unsigned actual_truncate;
+////////////////myedit bfloat
 
 enum cache_block_state {
     INVALID=0,
@@ -111,6 +129,10 @@ struct cache_block_t {
     virtual void allocate( new_addr_type tag, new_addr_type block_addr, unsigned time, mem_access_sector_mask_t sector_mask) = 0;
     virtual void fill( unsigned time, mem_access_sector_mask_t sector_mask) = 0;
 
+    ////////////////myedit highlight
+    virtual unsigned is_predicted(mem_access_sector_mask_t sector_mask) = 0;
+    ////////////////myedit highlight
+
     virtual bool is_invalid_line() = 0;
     virtual bool is_valid_line() = 0;
     virtual bool is_reserved_line() = 0;
@@ -146,6 +168,10 @@ struct line_cache_block: public cache_block_t  {
 	        m_ignore_on_fill_status = false;
 	        m_set_modified_on_fill = false;
 	        m_readable = true;
+
+			////////////myedit predictor
+			is_predicted = 0;
+			////////////myedit predictor
 	    }
 	    void allocate( new_addr_type tag, new_addr_type block_addr, unsigned time, mem_access_sector_mask_t sector_mask)
 	    {
@@ -157,8 +183,15 @@ struct line_cache_block: public cache_block_t  {
 	        m_status=RESERVED;
 	        m_ignore_on_fill_status = false;
 	        m_set_modified_on_fill = false;
+
+			////////////myedit predictor
+			is_predicted = 0;
+			////////////myedit predictor
 	    }
-		void fill( unsigned time, mem_access_sector_mask_t sector_mask )
+
+	    ///////////////////myedit highlight
+	    //void fill( unsigned time, mem_access_sector_mask_t sector_mask )
+		void fill( unsigned time, mem_access_sector_mask_t sector_mask, unsigned predicted )
 	    {
 	    	//if(!m_ignore_on_fill_status)
 	    	//	assert( m_status == RESERVED );
@@ -166,7 +199,29 @@ struct line_cache_block: public cache_block_t  {
 	    	m_status = m_set_modified_on_fill? MODIFIED : VALID;
 
 	        m_fill_time=time;
+
+			////////////myedit predictor
+			is_predicted = predicted;
+			////////////myedit predictor
 	    }
+
+	    virtual unsigned is_predicted(mem_access_sector_mask_t sector_mask)
+	    {
+			return is_predicted;
+	    }
+		///////////////////myedit highlight
+
+		/*
+		////////////myedit predictor
+		void fill_predicted(unsigned time) {  //////////////myedit highlight: obsolete
+			assert(m_status == RESERVED);
+			m_status = VALID;
+			m_fill_time = time;
+			is_predicted = 1;
+		}
+		////////////myedit predictor
+		*/
+
 		virtual bool is_invalid_line()
 	    {
 	    	return m_status == INVALID;
@@ -236,6 +291,10 @@ private:
 	    bool m_ignore_on_fill_status;
 	    bool m_set_modified_on_fill;
 	    bool m_readable;
+
+		////////////myedit predictor
+		unsigned is_predicted;
+		////////////myedit predictor
 };
 
 struct sector_cache_block : public cache_block_t {
@@ -253,6 +312,10 @@ struct sector_cache_block : public cache_block_t {
 			m_ignore_on_fill_status[i] = false;
 			m_set_modified_on_fill[i] = false;
 			m_readable[i] = true;
+
+			////////////myedit predictor
+			is_predicted[i] = 0;
+			////////////myedit predictor
 			}
 			m_line_alloc_time=0;
 			m_line_last_access_time=0;
@@ -311,9 +374,15 @@ struct sector_cache_block : public cache_block_t {
 		//set line stats
 		m_line_last_access_time=time;
 		m_line_fill_time=0;
+
+		////////////myedit predictor
+		is_predicted[sidx] = 0;
+		////////////myedit predictor
 	}
 
-    virtual void fill( unsigned time, mem_access_sector_mask_t sector_mask)
+    ///////////////////myedit highlight
+    //virtual void fill( unsigned time, mem_access_sector_mask_t sector_mask)
+    virtual void fill( unsigned time, mem_access_sector_mask_t sector_mask, unsigned predicted)
     {
     	unsigned sidx = get_sector_index(sector_mask);
 
@@ -324,7 +393,31 @@ struct sector_cache_block : public cache_block_t {
 
         m_sector_fill_time[sidx]=time;
         m_line_fill_time=time;
+
+		////////////myedit predictor
+		is_predicted[sidx] = predicted;
+		////////////myedit predictor
     }
+
+    virtual unsigned is_predicted(mem_access_sector_mask_t sector_mask)
+    {
+    	unsigned sidx = get_sector_index(sector_mask);
+
+		return is_predicted[sidx];
+    }
+	///////////////////myedit highlight
+
+	/*
+	////////////myedit predictor
+	void fill_predicted(unsigned time) {  //////////////myedit highlight: obsolete
+		assert(m_status == RESERVED);
+		m_status = VALID;
+		m_fill_time = time;
+		is_predicted = 1;
+	}
+	////////////myedit predictor
+	*/
+
     virtual bool is_invalid_line() {
     	//all the sectors should be invalid
     	for(unsigned i =0; i< SECTOR_CHUNCK_SIZE; ++i) {
@@ -432,6 +525,10 @@ private:
     bool m_set_modified_on_fill[SECTOR_CHUNCK_SIZE];
     bool m_readable[SECTOR_CHUNCK_SIZE];
 
+	////////////myedit predictor
+	unsigned is_predicted[SECTOR_CHUNCK_SIZE];
+	////////////myedit predictor
+
     unsigned get_sector_index(mem_access_sector_mask_t sector_mask)
     {
     	assert(sector_mask.count() == 1);
@@ -515,11 +612,21 @@ public:
         char ct, rp, wp, ap, mshr_type, wap, sif;
 
 
+        ////////////////////myeditCAA
         int ntok = sscanf(config,"%c:%u:%u:%u,%c:%c:%c:%c:%c,%c:%u:%u,%u:%u,%u",
                           &ct, &m_nset, &m_line_sz, &m_assoc, &rp, &wp, &ap, &wap,
                           &sif,&mshr_type,&m_mshr_entries,&m_mshr_max_merge,
                           &m_miss_queue_size, &m_result_fifo_entries,
                           &m_data_port_width);
+
+        int ntok = sscanf(config,"%c:%u:%u:%u,%c:%c:%c:%c:%c,%c:%u:%u,%u:%u,%u",
+                          &ct, &m_nset, &m_line_sz, &m_assoc, &rp, &wp, &ap, &wap,
+                          &sif,&mshr_type,&m_mshr_entries,&m_mshr_max_merge,
+                          &m_miss_queue_size, &m_result_fifo_entries,
+                          &m_data_port_width,
+						  &access_analysis_enabled, //#15
+						  &cache_mode);
+		////////////////////myeditCAA
 
         if ( ntok < 12 ) {
             if ( !strcmp(config,"none") ) {
@@ -719,6 +826,11 @@ public:
     char *m_config_stringPrefShared;
     FuncCache cache_status;
 
+	//////////////////////////myeditCAA
+	unsigned access_analysis_enabled;
+	unsigned cache_mode;
+	//////////////////////////myeditCAA
+
 protected:
     void exit_parse_error()
     {
@@ -799,9 +911,18 @@ public:
     enum cache_request_status access( new_addr_type addr, unsigned time, unsigned &idx, mem_fetch* mf );
     enum cache_request_status access( new_addr_type addr, unsigned time, unsigned &idx, bool &wb, evicted_block_info &evicted, mem_fetch* mf );
 
-    void fill( new_addr_type addr, unsigned time, mem_fetch* mf );
-    void fill( unsigned idx, unsigned time, mem_fetch* mf );
-    void fill( new_addr_type addr, unsigned time, mem_access_sector_mask_t mask );
+	//////////////myedit AMC
+	void truncate_float(mem_fetch *mf);
+
+    //void fill( new_addr_type addr, unsigned time, mem_fetch* mf );
+    //void fill( unsigned idx, unsigned time, mem_fetch* mf );
+    //void fill( new_addr_type addr, unsigned time, mem_access_sector_mask_t mask );
+    void fill( new_addr_type addr, unsigned time, mem_fetch* mf, unsigned predicted );
+    void fill( unsigned idx, unsigned time, mem_fetch* mf, unsigned predicted );
+    void fill( new_addr_type addr, unsigned time, mem_access_sector_mask_t mask, unsigned predicted );
+	//////////////myedit AMC
+
+
 
     unsigned size() const { return m_config.get_num_lines();}
     cache_block_t* get_block(unsigned idx) { return m_lines[idx];}
@@ -817,6 +938,17 @@ public:
 	void update_cache_parameters(cache_config &config);
 	void add_pending_line(mem_fetch *mf);
 	void remove_pending_line(mem_fetch *mf);
+
+	//////////////myeditpredictor
+	///////void allocate_and_fill_prediction(unsigned index, unsigned time, new_addr_type addr);//////////////myedit highlight: obsolete
+
+	unsigned is_predicted(unsigned index, mem_access_sector_mask_t sector_mask);
+	//////////////myeditpredictor
+
+	///////myedit AMC
+	unsigned fill_count;
+	///////myedit AMC
+
 protected:
     // This constructor is intended for use only from derived classes that wish to
     // avoid unnecessary memory allocation that takes place in the
@@ -872,8 +1004,14 @@ public:
     void add( new_addr_type block_addr, mem_fetch *mf );
     /// Returns true if cannot accept new fill responses
     bool busy() const {return false;}
+
+    //////////////myedit AMC
     /// Accept a new cache fill response: mark entry ready for processing
-    void mark_ready( new_addr_type block_addr, bool &has_atomic );
+    //void mark_ready( new_addr_type block_addr, bool &has_atomic );
+
+	void mark_ready( new_addr_type block_addr, bool &has_atomic, unsigned is_approximated, int is_l2);
+	//////////////myedit AMC
+
     /// Returns true if ready accesses exist
     bool access_ready() const {return !m_current_response.empty();}
     /// Returns next ready access
@@ -896,8 +1034,19 @@ private:
 
     struct mshr_entry {
         std::list<mem_fetch*> m_list;
-        bool m_has_atomic; 
-        mshr_entry() : m_has_atomic(false) { }
+        bool m_has_atomic;
+
+		//////////////myedit AMC
+		unsigned is_approx;
+		//////////////myedit AMC
+
+        mshr_entry() : m_has_atomic(false) {
+
+			//////////////myedit AMC
+			is_approx = 0;
+			//////////////myedit AMC
+
+        }
     }; 
     typedef tr1_hash_map<new_addr_type,mshr_entry> table;
     typedef tr1_hash_map<new_addr_type,mshr_entry> line_table;
@@ -1174,6 +1323,16 @@ public:
         m_tag_array->fill( addr, time, mask );
     }
 
+	////////////myedit AMC
+	unsigned get_fill_count() {
+		return m_tag_array->fill_count;
+	}
+
+	/////////////////myedit highlight: moved here
+	cache_config &m_config;
+	/////////////////myedit highlight: moved here
+	////////////myedit AMC
+
 protected:
     // Constructor that can be used by derived classes with custom tag arrays
     baseline_cache( const char *name,
@@ -1193,7 +1352,11 @@ protected:
 
 protected:
     std::string m_name;
-    cache_config &m_config;
+
+    /////////////////myedit highlight: originally here
+    //cache_config &m_config;
+    /////////////////myedit highlight: originally here
+
     tag_array*  m_tag_array;
 	mshr_table m_mshrs;
     std::list<mem_fetch*> m_miss_queue;
@@ -1517,10 +1680,22 @@ protected:
 /// (the policy used in fermi according to the CUDA manual)
 class l1_cache : public data_cache {
 public:
+	//////////////myeditpredictor
+	/*
     l1_cache(const char *name, cache_config &config,
             int core_id, int type_id, mem_fetch_interface *memport,
             mem_fetch_allocator *mfcreator, enum mem_fetch_status status )
             : data_cache(name,config,core_id,type_id,memport,mfcreator,status, L1_WR_ALLOC_R, L1_WRBK_ACC){}
+	 */
+
+	l1_cache(class shader_core_ctx *core, const char *name,
+			cache_config &config, int core_id, int type_id,
+			mem_fetch_interface *memport, mem_fetch_allocator *mfcreator,
+			enum mem_fetch_status status) :
+			m_core(core), data_cache(name, config, core_id, type_id, memport,
+					mfcreator, status, L1_WR_ALLOC_R, L1_WRBK_ACC) {
+	}
+	//////////////myeditpredictor
 
     virtual ~l1_cache(){}
 
@@ -1529,6 +1704,10 @@ public:
                 mem_fetch *mf,
                 unsigned time,
                 std::list<cache_event> &events );
+
+	//////////////myeditpredictor
+	class shader_core_ctx *m_core;
+	//////////////myeditpredictor
 
 protected:
     l1_cache( const char *name,

@@ -86,6 +86,15 @@ bool g_interactive_debugger_enabled=false;
 unsigned long long  gpu_sim_cycle = 0;
 unsigned long long  gpu_tot_sim_cycle = 0;
 
+////////////////////myeditpredictor
+unsigned long long gpu_tot_sim_insn;
+unsigned long long gpu_sim_insn;
+////////////////////myeditpredictor
+
+/////////////myeditamc
+unsigned long long temp_gpu_sim_insn = 0;
+unsigned long long temp_gpu_sim_cycle = 0;
+/////////////myeditamc
 
 // performance counter for stalls due to congestion.
 unsigned int gpu_stall_dramfull = 0; 
@@ -311,6 +320,12 @@ void shader_core_config::reg_options(class OptionParser * opp)
     option_parser_register(opp, "-gpgpu_n_ldst_response_buffer_size", OPT_UINT32, &ldst_unit_response_queue_size, 
                  "number of response packets in ld/st unit ejection buffer",
                  "2");
+
+	/////////////////////myedit prediction
+	option_parser_register(opp, "-bypassl1d", OPT_UINT32, &bypassl1d,
+			"bypass l1d cache or not", "0");
+	/////////////////////myedit prediction
+
     option_parser_register(opp, "-gpgpu_shmem_per_block", OPT_UINT32, &gpgpu_shmem_per_block,
                  "Size of shared memory per thread block or CTA (default 48kB)",
                  "49152");
@@ -514,9 +529,15 @@ void gpgpu_sim_config::reg_options(option_parser_t opp)
    option_parser_register(opp, "-gpgpu_flush_l2_cache", OPT_BOOL, &gpgpu_flush_l2_cache,
                    "Flush L2 cache at the end of each kernel call",
                    "0");
-   option_parser_register(opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect, 
-                "Stop the simulation at deadlock (1=on (default), 0=off)", 
-                "1");
+
+   /////////////////////////myedit highlight
+   //option_parser_register(opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect,
+   //            "Stop the simulation at deadlock (1=on (default), 0=off)", "1");
+
+   option_parser_register(opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect,
+                "Stop the simulation at deadlock (1=on (default), 0=off)", "0");
+   /////////////////////////myedit highlight
+
    option_parser_register(opp, "-gpgpu_ptx_instruction_classification", OPT_INT32, 
                &gpgpu_ptx_instruction_classification, 
                "if enabled will classify ptx instruction types per kernel (Max 255 kernels now)", 
@@ -1098,8 +1119,17 @@ void gpgpu_sim::clear_executed_kernel_info()
    m_executed_kernel_names.clear();
    m_executed_kernel_uids.clear();
 }
+
+////////////////myeditCAA
+unsigned kernel_index;
+////////////////myeditCAA
+
 void gpgpu_sim::gpu_print_stat() 
 {  
+	//////////////myeditAMC
+	kernel_index++;
+	//////////////myeditAMC
+
    FILE *statfout = stdout; 
 
    std::string kernel_info_str = executed_kernel_info_string(); 
@@ -1171,7 +1201,8 @@ void gpgpu_sim::gpu_print_stat()
       m_memory_partition_unit[i]->print(stdout);
 
    // L2 cache stats
-   if(!m_memory_config->m_L2_config.disabled()){
+   //if(!m_memory_config->m_L2_config.disabled()){
+   if (!m_memory_config->m_L2_config.disabled() && !m_memory_config->bypassl2d) { ////////////myedit AMC
        cache_stats l2_stats;
        struct cache_sub_stats l2_css;
        struct cache_sub_stats total_l2_css;
@@ -1189,7 +1220,9 @@ void gpgpu_sim::gpu_print_stat()
 
            total_l2_css += l2_css;
        }
-       if (!m_memory_config->m_L2_config.disabled() && m_memory_config->m_L2_config.get_num_lines()) {
+
+       //if (!m_memory_config->m_L2_config.disabled() && m_memory_config->m_L2_config.get_num_lines()) {
+       if (!m_memory_config->m_L2_config.disabled() && !m_memory_config->bypassl2d && m_memory_config->m_L2_config.get_num_lines()) { ////////////myedit AMC
           //L2c_print_cache_stat();
           printf("L2_total_cache_accesses = %llu\n", total_l2_css.accesses);
           printf("L2_total_cache_misses = %llu\n", total_l2_css.misses);
@@ -1659,6 +1692,10 @@ void gpgpu_sim::cycle()
           raise(SIGTRAP); // Debug breakpoint
       }
 	 gpu_sim_cycle++;
+
+		/////////////myedit amc
+		temp_gpu_sim_cycle++;
+		/////////////myedit amc
 	
       if( g_interactive_debugger_enabled ) 
          gpgpu_debug();
@@ -1693,7 +1730,8 @@ void gpgpu_sim::cycle()
               }
           }
 
-         if (all_threads_complete && !m_memory_config->m_L2_config.disabled() ) {
+         //if (all_threads_complete && !m_memory_config->m_L2_config.disabled() ) {
+         if (all_threads_complete && !m_memory_config->m_L2_config.disabled() && !m_memory_config->bypassl2d) { ////////////myedit AMC
             printf("Flushed L2 caches...\n");
             if (m_memory_config->m_L2_config.get_num_lines()) {
                int dlc = 0;
