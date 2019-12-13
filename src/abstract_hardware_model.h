@@ -273,10 +273,10 @@ public:
    std::string name() const;
 
 	//////////////////myedit predictor
-	std::list<class ptx_thread_info *> &active_threads() {
-		return m_active_threads;
-	}
-	//////////////////myedit predictor
+	//std::list<class ptx_thread_info *> &active_threads() {
+	//	return m_active_threads;
+	//}
+	//////////////////myedit predictor ///////////////myedit highlight: why did I add this? It originally exists.
 
    std::list<class ptx_thread_info *> &active_threads() { return m_active_threads; }
    class memory_space *get_param_memory() { return m_param_mem; }

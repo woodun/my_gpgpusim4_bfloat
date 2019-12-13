@@ -170,7 +170,7 @@ struct line_cache_block: public cache_block_t  {
 	        m_readable = true;
 
 			////////////myedit predictor
-			is_predicted = 0;
+			m_predicted = 0;
 			////////////myedit predictor
 	    }
 	    void allocate( new_addr_type tag, new_addr_type block_addr, unsigned time, mem_access_sector_mask_t sector_mask)
@@ -185,7 +185,7 @@ struct line_cache_block: public cache_block_t  {
 	        m_set_modified_on_fill = false;
 
 			////////////myedit predictor
-			is_predicted = 0;
+			m_predicted = 0;
 			////////////myedit predictor
 	    }
 
@@ -201,13 +201,13 @@ struct line_cache_block: public cache_block_t  {
 	        m_fill_time=time;
 
 			////////////myedit predictor
-			is_predicted = predicted;
+			m_predicted = predicted;
 			////////////myedit predictor
 	    }
 
 	    virtual unsigned is_predicted(mem_access_sector_mask_t sector_mask)
 	    {
-			return is_predicted;
+			return m_predicted;
 	    }
 		///////////////////myedit highlight
 
@@ -293,7 +293,7 @@ private:
 	    bool m_readable;
 
 		////////////myedit predictor
-		unsigned is_predicted;
+		unsigned m_predicted;
 		////////////myedit predictor
 };
 
@@ -314,7 +314,7 @@ struct sector_cache_block : public cache_block_t {
 			m_readable[i] = true;
 
 			////////////myedit predictor
-			is_predicted[i] = 0;
+			m_predicted[i] = 0;
 			////////////myedit predictor
 			}
 			m_line_alloc_time=0;
@@ -376,7 +376,7 @@ struct sector_cache_block : public cache_block_t {
 		m_line_fill_time=0;
 
 		////////////myedit predictor
-		is_predicted[sidx] = 0;
+		m_predicted[sidx] = 0;
 		////////////myedit predictor
 	}
 
@@ -395,7 +395,7 @@ struct sector_cache_block : public cache_block_t {
         m_line_fill_time=time;
 
 		////////////myedit predictor
-		is_predicted[sidx] = predicted;
+		m_predicted[sidx] = predicted;
 		////////////myedit predictor
     }
 
@@ -403,7 +403,7 @@ struct sector_cache_block : public cache_block_t {
     {
     	unsigned sidx = get_sector_index(sector_mask);
 
-		return is_predicted[sidx];
+		return m_predicted[sidx];
     }
 	///////////////////myedit highlight
 
@@ -526,7 +526,7 @@ private:
     bool m_readable[SECTOR_CHUNCK_SIZE];
 
 	////////////myedit predictor
-	unsigned is_predicted[SECTOR_CHUNCK_SIZE];
+	unsigned m_predicted[SECTOR_CHUNCK_SIZE];
 	////////////myedit predictor
 
     unsigned get_sector_index(mem_access_sector_mask_t sector_mask)
