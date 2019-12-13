@@ -613,18 +613,20 @@ public:
 
 
         ////////////////////myeditCAA
+        /*
         int ntok = sscanf(config,"%c:%u:%u:%u,%c:%c:%c:%c:%c,%c:%u:%u,%u:%u,%u",
                           &ct, &m_nset, &m_line_sz, &m_assoc, &rp, &wp, &ap, &wap,
                           &sif,&mshr_type,&m_mshr_entries,&m_mshr_max_merge,
                           &m_miss_queue_size, &m_result_fifo_entries,
                           &m_data_port_width);
+        */
 
-        int ntok = sscanf(config,"%c:%u:%u:%u,%c:%c:%c:%c:%c,%c:%u:%u,%u:%u,%u",
+        int ntok = sscanf(config,"%c:%u:%u:%u,%c:%c:%c:%c:%c,%c:%u:%u,%u:%u,%u;%u:%u",
                           &ct, &m_nset, &m_line_sz, &m_assoc, &rp, &wp, &ap, &wap,
                           &sif,&mshr_type,&m_mshr_entries,&m_mshr_max_merge,
                           &m_miss_queue_size, &m_result_fifo_entries,
                           &m_data_port_width,
-						  &access_analysis_enabled, //#15
+						  &access_analysis_enabled, //#16
 						  &cache_mode);
 		////////////////////myeditCAA
 

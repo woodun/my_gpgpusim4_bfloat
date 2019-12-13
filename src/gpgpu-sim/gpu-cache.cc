@@ -2196,6 +2196,7 @@ l1_cache::access( new_addr_type addr,
 		///////////////////////////// is there difference between SECTOR_HIT and HIT? no.
 		////////////myedit highlight: question: how cudaMalloc in libcuda/cuda_runtime_api.cc is used by the application's code (how is it compiled with nvcc, is it used in ptx or binary?)?
 		////////////todo: do a sanity check and compare the performance of sector vs non-secotr case.
+		////////////myedit highlight: for gpu_wattch, we are using old configs to estimate. actually we should use gtx 1080 which has power configs and also uses gddr5 whose bit energy data can be found
 
 		enum cache_request_status access_status = data_cache::access(addr, mf, time, events);
 
