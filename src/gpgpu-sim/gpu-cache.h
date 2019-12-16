@@ -127,7 +127,11 @@ struct cache_block_t {
     }
 
     virtual void allocate( new_addr_type tag, new_addr_type block_addr, unsigned time, mem_access_sector_mask_t sector_mask) = 0;
-    virtual void fill( unsigned time, mem_access_sector_mask_t sector_mask) = 0;
+
+    ////////////////myedit highlight
+    //virtual void fill( unsigned time, mem_access_sector_mask_t sector_mask) = 0;
+    virtual void fill( unsigned time, mem_access_sector_mask_t sector_mask, unsigned predicted ) = 0;
+    ////////////////myedit highlight
 
     ////////////////myedit highlight
     virtual unsigned is_predicted(mem_access_sector_mask_t sector_mask) = 0;
