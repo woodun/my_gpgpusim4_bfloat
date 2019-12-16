@@ -369,7 +369,11 @@ enum cache_request_status tag_array::access( new_addr_type addr, unsigned time, 
         if ( m_config.m_alloc_policy == ON_MISS ) {
             if( m_lines[idx]->is_modified_line()) {
                 wb = true;
-                evicted.set_info(m_lines[idx]->m_block_addr, m_lines[idx]->get_modified_size());
+
+                //////////////////myedit highlight
+                //evicted.set_info(m_lines[idx]->m_block_addr, m_lines[idx]->get_modified_size());
+                evicted.set_info(m_lines[idx]->m_block_addr, m_lines[idx]->get_modified_size(), m_lines[idx]->is_predicted(mf->get_access_sector_mask() ) );
+                //////////////////myedit highlight
             }
             m_lines[idx]->allocate( m_config.tag(addr), m_config.block_addr(addr), time, mf->get_access_sector_mask());
         }
@@ -463,7 +467,7 @@ void tag_array::truncate_float(mem_fetch *mf) { /////////////must make sure it i
 
 		////////power model vampire, drampower
 
-		if(get_truncation_scenario() == 0){//////////////In scenario 0, when truncate truncate float to bfloat?
+		if(mf->get_truncation_scenario() == 0){//////////////In scenario 0, when truncate truncate float to bfloat?
 
 			if(mf->get_truncate_ratio() == 2){/////////In scenario 0, this is float32 to bfloat16. In other scenarios, this code remains the same even when truncate new_float32 to bfloat16.
 				for(int i = 0; i < data->get_data_size(); i += 4){
@@ -1799,7 +1803,7 @@ data_cache::wr_miss_wa_lazy_fetch_on_read( new_addr_type addr,
 		}
 
 		bool wb = false;
-		evicted_block_info evicted;
+		evicted_block_info evicted;///////////////////myedit highlight: originally cache_block_t evicted; so evicted_block_info needs changes.
 
 		cache_request_status m_status =  m_tag_array->access(block_addr,time,cache_index,wb,evicted,mf);
 		assert(m_status != HIT);

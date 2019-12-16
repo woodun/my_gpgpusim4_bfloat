@@ -93,14 +93,34 @@ enum cache_event_type {
 struct evicted_block_info {
 	new_addr_type m_block_addr;
 	unsigned m_modified_size;
+
+	//////////////myedit highlight
+	unsigned m_is_predicted;
+	//////////////myedit highlight
+
 	evicted_block_info() {
 		m_block_addr = 0;
 		m_modified_size = 0;
+
+		//////////////myedit highlight
+		m_is_predicted = 0;
+		//////////////myedit highlight
 	}
+
+	//////////////myedit highlight
+	/*
 	void set_info(new_addr_type block_addr, unsigned modified_size){
 		m_block_addr = block_addr;
 		m_modified_size = modified_size;
 	}
+	*/
+
+	void set_info(new_addr_type block_addr, unsigned modified_size, unsigned is_predicted){
+		m_block_addr = block_addr;
+		m_modified_size = modified_size;
+		m_is_predicted = is_predicted;
+	}
+	//////////////myedit highlight
 };
 
 struct cache_event {
