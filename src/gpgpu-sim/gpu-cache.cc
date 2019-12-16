@@ -2331,7 +2331,7 @@ l2_cache::access( new_addr_type addr,
 		m_tag_array->probe(	block_addr, cache_index, mf);//////////the only purpose of this is to get cache_index from block_addr
 		///////////////////myedit highlight: new implementation
 
-		if (m_tag_array->is_predicted(cache_index, , mf->get_access_sector_mask() ) == 1) {
+		if (m_tag_array->is_predicted(cache_index, mf->get_access_sector_mask() ) == 1) {
 			mf->set_approx(); //////////this mf is what will be pushed back to the l2_inct_queue.
 		}
 	}
