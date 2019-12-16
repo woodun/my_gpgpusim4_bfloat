@@ -1585,6 +1585,8 @@ data_cache::wr_miss_wa_naive( new_addr_type addr,
     //if(!send_write_allocate(mf, addr, block_addr, cache_index, time, events))
     //    return RESERVATION_FAIL;
 
+    ///////////////////////myedit highlight
+    /*
     const mem_access_t *ma = new  mem_access_t( m_wr_alloc_type,
                         mf->get_addr(),
 						m_config.get_atom_sz(),
@@ -1592,6 +1594,17 @@ data_cache::wr_miss_wa_naive( new_addr_type addr,
                         mf->get_access_warp_mask(),
                         mf->get_access_byte_mask(),
 		                mf->get_access_sector_mask());
+	*/
+
+    const mem_access_t *ma = new  mem_access_t( m_wr_alloc_type,
+                        mf->get_addr(),
+						m_config.get_atom_sz(),
+                        false, // Now performing a read
+                        mf->get_access_warp_mask(),
+                        mf->get_access_byte_mask(),
+		                mf->get_access_sector_mask(),
+						mf->is_access_atomic(), mf->get_access_thread_correspondance());
+    ///////////////////////myedit highlight
 
     mem_fetch *n_mf = new mem_fetch( *ma,
                     NULL,
