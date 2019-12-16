@@ -111,17 +111,17 @@ extern double bwutil;
 extern double bwutil_global_read;
 extern double bwutil_global_write;
 
-unsigned long long n_cmd;
-unsigned long long n_activity;
-unsigned long long n_nop;
-unsigned long long n_act;
-unsigned long long n_pre;
-unsigned long long n_ref;
-unsigned long long n_rd;
-unsigned long long n_rd_L2_A;
-unsigned long long n_wr;
-unsigned long long n_wr_WB;
-unsigned long long n_req;
+extern unsigned long long n_cmd;
+extern unsigned long long n_activity;
+extern unsigned long long n_nop;
+extern unsigned long long n_act;
+extern unsigned long long n_pre;
+extern unsigned long long n_ref;
+extern unsigned long long n_rd;
+extern unsigned long long n_rd_L2_A;
+extern unsigned long long n_wr;
+extern unsigned long long n_wr_WB;
+extern unsigned long long n_req;
 ////////myeditprofile
 
 ////////////myeditamc
