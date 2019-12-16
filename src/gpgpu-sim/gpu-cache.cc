@@ -425,8 +425,10 @@ void tag_array::truncate_float(mem_fetch *mf) { /////////////must make sure it i
 		/////////// NF32 (1, 8, 23) -> NB16 (1, 8, 7) -> NB8 (1, 5, 2):
 
 
-		/////////// I32 -> IL16 -> IL8 (left remained): NA. Float cannot be stored in int. Int stored in int is proved to be bad for energy and error in exp1. But int can be stored in float and tested in above shemes.
-		/////////// I32 -> IR16 -> IR8 (right remained): NA. Float cannot be stored in int. Int stored in int is proved to be bad for energy and error in exp1. But int can be stored in float and tested in above shemes.
+		/////////// I32 -> IL16 -> IL8 (left remained): NA. Float cannot be stored in int. Int stored in int is proved to be bad for energy and error in exp1.
+		/////////// But int can be stored in float and tested in above shemes.
+		/////////// I32 -> IR16 -> IR8 (right remained): NA. Float cannot be stored in int. Int stored in int is proved to be bad for energy and error in exp1.
+		/////////// But int can be stored in float and tested in above shemes.
 
 		/////// F32: 127 to 1, 0 to -126 (254 to 128, 127 to 1), 0 is subnormal, 255 is inf
 		/////// F16: 15 to 1, 0 to -14 (30 to 16, 15 to 1), 0 is subnormal, 31 is inf
@@ -453,8 +455,10 @@ void tag_array::truncate_float(mem_fetch *mf) { /////////////must make sure it i
 		////////scenario 5: profiling mode, truncated value is not written back to memory
 
 		////////DBI toggle: enable/disable DBI
-		////////energy profiling toggle: get the number of bit flips and ones, when working with scenario 5, counts for all truncation scenarios are collected. truncated value is not written back to memory.
-		////////error profiling toggle: collect the hardware error or not, when working with scenario 5, hardware errors for all truncation scenarios are collected. truncated value is not written back to memory.
+		////////energy profiling toggle: get the number of bit flips and ones, when working with scenario 5, counts for all truncation scenarios are collected.
+		////////truncated value is not written back to memory.
+		////////error profiling toggle: collect the hardware error or not, when working with scenario 5, hardware errors for all truncation scenarios are collected.
+		////////truncated value is not written back to memory.
 		////////question: is bit flips modeled in gpuwattch? If not, how do we model their % memory energy or % system energy based on their count? (Joule per count? find this info)
 
 		////////power model vampire, drampower
@@ -1712,6 +1716,8 @@ data_cache::wr_miss_wa_fetch_on_write( new_addr_type addr,
 			  return RESERVATION_FAIL;
 		  }
 
+		  ///////////////////////myedit highlight
+		  /*
 		  const mem_access_t *ma = new  mem_access_t( m_wr_alloc_type,
 									mf->get_addr(),
 									m_config.get_atom_sz(),
@@ -1719,6 +1725,19 @@ data_cache::wr_miss_wa_fetch_on_write( new_addr_type addr,
 									mf->get_access_warp_mask(),
 									mf->get_access_byte_mask(),
 									mf->get_access_sector_mask());
+		  */
+
+		  const mem_access_t *ma = new  mem_access_t( m_wr_alloc_type,
+									mf->get_addr(),
+									m_config.get_atom_sz(),
+									false, // Now performing a read
+									mf->get_access_warp_mask(),
+									mf->get_access_byte_mask(),
+									mf->get_access_sector_mask(),
+									mf->is_access_atomic(), mf->get_access_thread_correspondance() );
+		  ///////////////////////myedit highlight: using mf->get_access_thread_correspondance() should be fine here since l1 is using no-write-allocate and will not read and redo data from write misses.
+		  //////////////////////////////////////// even if l1 uses write-allocate policies, this should still be fine since we still check if it is a ld at this pc which should return -1
+		  //////////////////////////////////////// as address_type get_pc() const { return m_inst.empty()?-1:m_inst.pc; } and NULL filled below.
 
 		  mem_fetch *n_mf = new mem_fetch( *ma,
 								NULL,
@@ -2235,8 +2254,8 @@ l1_cache::access( new_addr_type addr,
 					unsigned is_ld = 1;
 					for (unsigned t = 0; t < 32; t++) {
 
-						unsigned data_starting_index_of_thread_in_line =
-								(mf->get_access_thread_correspondance())[t]; /////data starting indices that belong to this line and belong to this warp
+						unsigned data_starting_index_of_thread_in_line = /////data starting indices that belong to this line and belong to this warp ////myedit highlight: this works for sector case
+								(mf->get_access_thread_correspondance())[t];
 
 						////////////////myedit highlight: it means this thread (id 0 - 31) is using data within this mf (which is ready in the cache space).
 						////////////////check: is all marked predicted data ready in the cache space before here?
@@ -2260,7 +2279,7 @@ l1_cache::access( new_addr_type addr,
 
 						for (unsigned t = 0; t < 32; t++) {
 
-							unsigned data_starting_index_of_thread_in_line = /////data indices that belong to this line and belong to this warp
+							unsigned data_starting_index_of_thread_in_line = /////data indices that belong to this line and belong to this warp ////myedit highlight: this works for sector case
 									(mf->get_access_thread_correspondance())[t];
 
 							if (data_starting_index_of_thread_in_line > 0) { ///////////0 means null, and the real id is: thread_of_warp_in_line - 1

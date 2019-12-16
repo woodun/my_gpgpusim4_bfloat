@@ -665,6 +665,8 @@ std::vector<mem_fetch*> memory_sub_partition::breakdown_request_to_sector_reques
 
 		for(unsigned j=start, i=0; j<= end ; ++j, ++i){
 
+			//////////////////myedit highlight
+			/*
 			const mem_access_t *ma = new  mem_access_t( mf->get_access_type(),
 									mf->get_addr() + SECTOR_SIZE*i,
 									SECTOR_SIZE,
@@ -672,6 +674,18 @@ std::vector<mem_fetch*> memory_sub_partition::breakdown_request_to_sector_reques
 									mf->get_access_warp_mask(),
 									mf->get_access_byte_mask() & byte_sector_mask,
 									std::bitset<SECTOR_CHUNCK_SIZE>().set(j));
+			*/
+
+			const mem_access_t *ma = new  mem_access_t( mf->get_access_type(),
+												mf->get_addr() + SECTOR_SIZE*i,
+												SECTOR_SIZE,
+												mf->is_write(),
+												mf->get_access_warp_mask(),
+												mf->get_access_byte_mask() & byte_sector_mask,
+												std::bitset<SECTOR_CHUNCK_SIZE>().set(j),
+												mf->is_access_atomic(), mf->get_access_thread_correspondance() );
+			//////////////////myedit highlight: get_access_thread_correspondance() needs to be changed here,
+			/////////////////////////////////// however we currently use configs that do not enter this branch, so we did not change but just coped with the compilation.
 
 			 mem_fetch *n_mf = new mem_fetch( *ma,
 								NULL,

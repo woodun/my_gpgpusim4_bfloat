@@ -2278,7 +2278,7 @@ void ldst_unit::writeback()
                 mem_fetch *mf = m_L1D->next_access();
 
 				//////////////myeditDSN
-				if (mf->is_approximated()) { /////////redo with approximate data only.
+				if (mf->is_approximated() && mf->get_access_type() == GLOBAL_ACC_R ) { /////////redo with approximate data only. //////myedit highlight: make sure mf->get_access_type() == GLOBAL_ACC_R
 
 					if (redo_in_l1) {
 
