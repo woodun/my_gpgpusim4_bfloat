@@ -516,7 +516,7 @@ void tag_array::truncate_float(mem_fetch *mf) { /////////////must make sure it i
 				}
 			}//////////////////////end of: if(get_truncation_scenario() == 0){
 
-		}else if(get_truncation_scenario() == 1){//////////////In scenario 1,
+		}else if(mf->get_truncation_scenario() == 1){//////////////In scenario 1,
 
 		}
 
@@ -1853,7 +1853,7 @@ data_cache::wr_miss_wa_lazy_fetch_on_read( new_addr_type addr,
 				   ////////////////////////////// but the modified part is already written to the global space at the same time when written to the cache space in our implementation.
 
 					if(m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
-							&& evicted.is_predicted == 1){ ////////////////////only l2 need to do the copy from cache space to global space
+							&& evicted.m_is_predicted == 1){ ////////////////////only l2 need to do the copy from cache space to global space
 					///////////////////myedit highlight: for a fetch-on-write cache (gtx480), it does not have the modified-words mask, therefore, whole cache line must be written back to the dram.
 					//////////////////////////////////// however, for our favor, we can assume that it does have the modified-words mask, and can switch to write-validate mode (titanx).
 					//////////////////////////////////// just that it uses the fetch-on-write to avoid the unreadable lines when read hit.
@@ -1977,7 +1977,7 @@ data_cache::rd_miss_base( new_addr_type addr,
 		////////////////////////////////here we only cover the l2 to dram case, because l1 is using we. (we only need to fix l1 if l1 uses wb)
 
 			if(m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
-					&& evicted.is_predicted == 1){ ////////////////////only l2 need to do the copy from cache space to global space
+					&& evicted.m_is_predicted == 1){ ////////////////////only l2 need to do the copy from cache space to global space
 				///////////////////myedit highlight: for a fetch-on-write cache (gtx480), it does not have the modified-words mask, therefore, whole cache line must be written back to the dram.
 				//////////////////////////////////// however, for our favor, we can assume that it does have the modified-words mask, and can switch to write-validate mode (titanx).
 				//////////////////////////////////// just that it uses the fetch-on-write to avoid the unreadable lines when read hit.
