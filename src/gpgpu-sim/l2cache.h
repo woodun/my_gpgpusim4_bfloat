@@ -189,11 +189,19 @@ public:
    void get_L2cache_sub_stats_pw(struct cache_sub_stats_pw &css) const;
    void clear_L2cache_stats_pw();
 
-   void force_l2_tag_update(new_addr_type addr, unsigned time, mem_access_sector_mask_t mask)
+   /////////////////myedit highlight
+   //void force_l2_tag_update(new_addr_type addr, unsigned time, mem_access_sector_mask_t mask)
+   //{
+   //     m_L2cache->force_tag_access( addr, m_memcpy_cycle_offset + time, mask );
+   //     m_memcpy_cycle_offset += 1;
+   //}
+
+   void force_l2_tag_update(new_addr_type addr, unsigned time, mem_access_sector_mask_t mask, unsigned is_predicted)
    {
-        m_L2cache->force_tag_access( addr, m_memcpy_cycle_offset + time, mask );
+        m_L2cache->force_tag_access( addr, m_memcpy_cycle_offset + time, mask, is_predicted );
         m_memcpy_cycle_offset += 1;
    }
+   /////////////////myedit highlight
 
    //////////////myedit AMC
    class memory_partition_unit* m_partition;

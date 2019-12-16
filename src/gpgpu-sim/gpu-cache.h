@@ -1320,10 +1320,18 @@ public:
     // filling the cache on cudamemcopies. We don't care about anything other than
     // L2 state after the memcopy - so just force the tag array to act as though
     // something is read or written without doing anything else.
-    void force_tag_access( new_addr_type addr, unsigned time, mem_access_sector_mask_t mask )
+
+    /////////////////myedit highlight
+    //void force_tag_access( new_addr_type addr, unsigned time, mem_access_sector_mask_t mask )
+    //{
+    //    m_tag_array->fill( addr, time, mask );
+    //}
+
+    void force_tag_access( new_addr_type addr, unsigned time, mem_access_sector_mask_t mask, unsigned is_predicted )
     {
-        m_tag_array->fill( addr, time, mask );
+    	m_tag_array->fill( addr, time, mask, is_predicted );
     }
+    /////////////////myedit highlight
 
 	////////////myedit AMC
 	unsigned get_fill_count() {
