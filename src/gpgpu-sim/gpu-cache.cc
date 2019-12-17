@@ -1345,7 +1345,7 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time){
 		if (m_config.m_alloc_policy == ON_MISS) {
 
 			if (m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
-					&& mf->is_approximated() ) {	/////////////only l2 can search, l1 is using LOCAL_WB_GLOBAL_WT
+					&& mf->is_approximated() ) {	/////////////only l2 can search, l1 is using LOCAL_WB_GLOBAL_WT /////myedit highlight todo: const and inst cache also come here, change to l1 token
 
 					//printf("##########debug:m_name:%s\n", m_name.c_str());/////////////debug
 					//fflush (stdout);
