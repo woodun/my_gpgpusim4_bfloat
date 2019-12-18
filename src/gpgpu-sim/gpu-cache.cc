@@ -288,11 +288,23 @@ enum cache_request_status tag_array::probe( new_addr_type addr, unsigned &idx, m
             	}
             	else {
             		idx = index;
+
+            		//////////myedit highlight
+            		printf("debug#1");
+            		fflush(stdout);
+            		//////////myedit highlight
+
             		return SECTOR_MISS;
             	}
 
             } else if ( line->is_valid_line() && line->get_status(mask) == INVALID ) {
                 idx = index;
+
+                //////////myedit highlight
+                printf("debug#2");
+                fflush(stdout);
+                //////////myedit highlight
+
                 return SECTOR_MISS;
             }else {
                 assert( line->get_status(mask) == INVALID );
@@ -334,8 +346,15 @@ enum cache_request_status tag_array::probe( new_addr_type addr, unsigned &idx, m
 		line_table::const_iterator i = pending_lines.find(m_config.block_addr(addr));
 		assert(mf);
 		if ( !mf->is_write() && i != pending_lines.end() ) {
-			 if(i->second != mf->get_inst().get_uid())
+			 if(i->second != mf->get_inst().get_uid()){
+
+				 //////////myedit highlight
+				 printf("debug#3");
+				 fflush(stdout);
+				 //////////myedit highlight
+
 				 return SECTOR_MISS;
+			 }
 		}
     }
 
@@ -1344,8 +1363,8 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time){
 
 		if (m_config.m_alloc_policy == ON_MISS) {
 
-			if (m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
-					&& mf->is_approximated() ) {	/////////////only l2 can search, l1 is using LOCAL_WB_GLOBAL_WT /////myedit highlight todo: const and inst cache also come here, change to l1 token
+			if (m_config.m_write_policy != LOCAL_WB_GLOBAL_WT && mf->is_approximated()
+					&& mf->get_access_type() == GLOBAL_ACC_R) {	/////////////only l2 can search, l1 is using LOCAL_WB_GLOBAL_WT /////myedit highlight todo: const and inst cache also come here, change to l1 token
 
 					//printf("##########debug:m_name:%s\n", m_name.c_str());/////////////debug
 					//fflush (stdout);
@@ -1366,8 +1385,8 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time){
 
 		} else if (m_config.m_alloc_policy == ON_FILL) {
 
-			if (m_config.m_write_policy != LOCAL_WB_GLOBAL_WT
-					&& mf->is_approximated() ) {	/////////////only l2 can search, l1 is using LOCAL_WB_GLOBAL_WT
+			if (m_config.m_write_policy != LOCAL_WB_GLOBAL_WT && mf->is_approximated()
+					&& mf->get_access_type() == GLOBAL_ACC_R) {	/////////////only l2 can search, l1 is using LOCAL_WB_GLOBAL_WT
 
 					//printf("##########debug:m_name:%s\n", m_name.c_str());/////////////debug
 					//fflush (stdout);
