@@ -290,8 +290,8 @@ enum cache_request_status tag_array::probe( new_addr_type addr, unsigned &idx, m
             		idx = index;
 
             		//////////myedit highlight
-            		printf("debug#1\n");
-            		fflush(stdout);
+            		//printf("debug#1\n");
+            		//fflush(stdout);
             		//////////myedit highlight
 
                     ////////////myedit highlight: modifications for using normal l1 and l2 caches with write-validate policy. GPGPUSIM does not consider write-validate policy with normal cache case.
@@ -308,8 +308,8 @@ enum cache_request_status tag_array::probe( new_addr_type addr, unsigned &idx, m
                 idx = index;
 
                 //////////myedit highlight
-                printf("debug#2\n");
-                fflush(stdout);
+                //printf("debug#2\n");
+                //fflush(stdout);
                 //////////myedit highlight
 
                 ////////////myedit highlight: modifications for using normal l1 and l2 caches with write-validate policy. GPGPUSIM does not consider write-validate policy with normal cache case.
@@ -364,8 +364,8 @@ enum cache_request_status tag_array::probe( new_addr_type addr, unsigned &idx, m
 			 if(i->second != mf->get_inst().get_uid()){
 
 				 //////////myedit highlight
-				 printf("debug#3\n");
-				 fflush(stdout);
+				 //printf("debug#3\n");
+				 //fflush(stdout);
 				 //////////myedit highlight
 
 				////////////myedit highlight: modifications for using normal l1 and l2 caches with write-validate policy. GPGPUSIM does not consider write-validate policy with normal cache case.
