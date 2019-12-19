@@ -294,7 +294,14 @@ enum cache_request_status tag_array::probe( new_addr_type addr, unsigned &idx, m
             		fflush(stdout);
             		//////////myedit highlight
 
-            		return SECTOR_MISS;
+                    ////////////myedit highlight: modifications for using normal l1 and l2 caches with write-validate policy. GPGPUSIM does not consider write-validate policy with normal cache case.
+                    //return SECTOR_MISS;
+                    if(m_config.m_cache_type == SECTOR){
+                    	return SECTOR_MISS;
+                    }else{
+                    	return MISS;
+                    }
+                    ////////////myedit highlight
             	}
 
             } else if ( line->is_valid_line() && line->get_status(mask) == INVALID ) {
@@ -305,7 +312,15 @@ enum cache_request_status tag_array::probe( new_addr_type addr, unsigned &idx, m
                 fflush(stdout);
                 //////////myedit highlight
 
-                return SECTOR_MISS;
+                ////////////myedit highlight: modifications for using normal l1 and l2 caches with write-validate policy. GPGPUSIM does not consider write-validate policy with normal cache case.
+                //return SECTOR_MISS;
+                if(m_config.m_cache_type == SECTOR){
+                	return SECTOR_MISS;
+                }else{
+                	return MISS;
+                }
+                ////////////myedit highlight
+
             }else {
                 assert( line->get_status(mask) == INVALID );
             }
@@ -353,7 +368,14 @@ enum cache_request_status tag_array::probe( new_addr_type addr, unsigned &idx, m
 				 fflush(stdout);
 				 //////////myedit highlight
 
-				 return SECTOR_MISS;
+				////////////myedit highlight: modifications for using normal l1 and l2 caches with write-validate policy. GPGPUSIM does not consider write-validate policy with normal cache case.
+				//return SECTOR_MISS;
+				if(m_config.m_cache_type == SECTOR){
+					return SECTOR_MISS;
+				}else{
+					return MISS;
+				}
+				////////////myedit highlight
 			 }
 		}
     }
