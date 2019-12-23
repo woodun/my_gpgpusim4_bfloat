@@ -1,3 +1,5 @@
 eclipse.preferences.version=1
+encoding//src/gpuwattch/interconnect.cc=UTF-8
 encoding//src/gpuwattch/memoryctrl.cc=UTF-8
 encoding//src/gpuwattch/noc.cc=UTF-8
+encoding//src/gpuwattch/processor.cc=UTF-8
