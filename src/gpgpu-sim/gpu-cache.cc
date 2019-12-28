@@ -450,7 +450,17 @@ void tag_array::truncate_float(mem_fetch *mf) { /////////////must make sure it i
 	////////////////myedit highlight question: when is computeEnergy called? gpgpu_sim::cycle(), mcpat_cycle( and wrapper->compute(); every cycle
 	////////////////myedit highlight question: why cannot we use hbm? currently only gddr5's bit energy data can be found.
 	////////////////can we reduce the burst burst length for truncated accesses (as short as 8 bytes)? No, non-truncated accesses (32B sectors), it still needs burst length of 8 (* 4B bus width = 32B).
-	memory_partition_indexing?
+	////////////////myedit highlight: 8B independent tags for truncated data is too expensive and not necessary, since only continuous truncated 8B sectors can be fetched from memory.
+	////////////////therefore, we use 32B independent tags which can store 32B sectors, 4 * 8B data or 2 * 16B data and it also has additional bits for identifying the store type.
+	////////////////consecutive sectors are not necessarily stored consecutively, therefore, LRU or other policies can be applied as before.
+	////////////////we can use truncated priority policy which divides the age of cache block by its truncation ratio.
+	////////////////we can increase the number of sets and decrease the number of ways to keep the searching overhead the same with increased tags.
+	////////////////myedit highlight question: why don't they use 32B cache blocks instead of 32B sectors? it can more efficiently utilize the cache spaces. experiment and see performance.
+	////////////////we can propose two designs, increase the number of tags vs enable the chunk storage (consecutive 512B) in the original cache line.
+	////////////////for the dram, we can use three designs, reduce the burst length (does time reduce?); dynamic data mapping based on error and energy; chunk fetching (32B for a 128B line altogether);
+
+	////////////////myedit highlight question: Does LRU have synergy with GTO? can we have policies work synergistically with warp scheduler?
+	////////////////programmer can generate traces of (hardware error, ld instruction) making precise error calculation possible.
 	/////////////////////////////////////////////////////////////////////////////////////read from nearby address
 	mem_fetch *data = mf;
 	char * mydata = new char[data->get_data_size()];

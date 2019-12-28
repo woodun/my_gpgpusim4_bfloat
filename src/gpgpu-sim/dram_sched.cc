@@ -219,7 +219,7 @@ dram_req_t *frfcfs_scheduler::schedule( unsigned bank, unsigned curr_row )
    std::map<unsigned,std::list<std::list<dram_req_t*>::iterator> > *m_current_bins = m_bins ;
    std::list<std::list<dram_req_t*>::iterator> **m_current_last_row = m_last_row;
 
-   if(m_config->seperate_write_queue_enabled) {
+   if(m_config->seperate_write_queue_enabled) { ////////////////myedit highlight: separate write queue is not enabled in titanx
 	   if(m_mode == READ_MODE &&
 			  ((m_num_write_pending >= m_config->write_high_watermark )
 			  // || (m_queue[bank].empty() && !m_write_queue[bank].empty())
@@ -244,10 +244,24 @@ dram_req_t *frfcfs_scheduler::schedule( unsigned bank, unsigned curr_row )
       if ( m_current_queue[bank].empty() )
          return NULL;
 
+
+      ////////////////////myedit highlight: todo: find back-to-back sectors from the same line.
+      if(m_config.m_cache_type == SECTOR){
+
+      }
+      ////////////////////myedit highlight: todo: find back-to-back sectors from the same line. get cache line locality.
+      ////////////////////what is the address for sector? unsigned block_address = line_size_based_tag_func(addr,segment_size); segment_size = 32 for l1 sector cache. so it is sector starting address.
+
+
       std::map<unsigned,std::list<std::list<dram_req_t*>::iterator> >::iterator bin_ptr = m_current_bins[bank].find( curr_row );
       if ( bin_ptr == m_current_bins[bank].end()) {
          dram_req_t *req = m_current_queue[bank].back();
          bin_ptr = m_current_bins[bank].find( req->row );
+
+         ///////////////myedit highlight: here look for consecutive sectors
+
+         ///////////////myedit highlight: here look for consecutive sectors
+
          assert( bin_ptr != m_current_bins[bank].end() ); // where did the request go???
          m_current_last_row[bank] = &(bin_ptr->second);
          data_collection(bank);
