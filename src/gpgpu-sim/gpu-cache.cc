@@ -447,6 +447,7 @@ void tag_array::truncate_float(mem_fetch *mf) { /////////////must make sure it i
 	new_addr_type addr = mf->get_addr();
 	new_addr_type block_addr = m_config.block_addr(addr);
 
+	////////////////myedit highlight: what is the unit for power output? Watts. where is the best place to intercept with our value?
 	////////////////myedit highlight question: when is computeEnergy called? gpgpu_sim::cycle(), mcpat_cycle( and wrapper->compute(); every cycle
 	////////////////myedit highlight question: why cannot we use hbm? currently only gddr5's bit energy data can be found.
 	////////////////can we reduce the burst burst length for truncated accesses (as short as 8 bytes)? No, non-truncated accesses (32B sectors), it still needs burst length of 8 (* 4B bus width = 32B).
