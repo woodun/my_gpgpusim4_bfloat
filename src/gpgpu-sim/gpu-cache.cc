@@ -461,6 +461,7 @@ void tag_array::truncate_float(mem_fetch *mf) { /////////////must make sure it i
 
 	////////////////myedit highlight question: Does LRU have synergy with GTO? can we have policies work synergistically with warp scheduler?
 	////////////////programmer can generate traces of (hardware error, ld instruction) making precise error calculation possible.
+	////////////////myedit highlight: scheme to choose hybrid caches? when one (normal or sector) is better than the other?
 	/////////////////////////////////////////////////////////////////////////////////////read from nearby address
 	mem_fetch *data = mf;
 	char * mydata = new char[data->get_data_size()];
