@@ -3,7 +3,7 @@
 	<component id="system" name="system">
 		<!--McPAT will skip the components if number is set to 0 -->
 		<param name="GPU_Architecture" value="1"/><!-- 0-G80; 1-Fermi; others not supported -->
-		<param name="number_of_cores" value="28"/>
+		<param name="number_of_cores" value="56"/>
 		<param name="architecture" value="1"/> <!-- fermi:1 quadro:2 other: undefined-->
 		<param name="number_of_L1Directories" value="0"/>
 		<param name="number_of_L2Directories" value="0"/>
@@ -125,7 +125,7 @@
 			<param name="core_clock_ratio" value="2"/>
 			<param name="warp_size" value="32"/>
 
-			<param name="archi_Regs_IRF_size" value="65536"/>			
+			<param name="archi_Regs_IRF_size" value="32768"/>			
 			<param name="archi_Regs_FRF_size" value="32"/>
 			<!--  if OoO processor, phy_reg number is needed for renaming logic, 
 			renaming logic is for both integer and floating point insts.  -->
