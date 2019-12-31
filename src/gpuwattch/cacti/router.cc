@@ -25,7 +25,7 @@
  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.”
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.鈥�
  *
  ***************************************************************************/
 
@@ -206,7 +206,7 @@ void MCPAT_Router::buffer_stats()
 MCPAT_Router::cb_stats ()
 {
   if (1) {
-    Crossbar c_b(I, O, flit_size);
+    Crossbar c_b(I, O, flit_size); //////////////////myedit highlight: this is where cross bar energy initially come from
     c_b.compute_power();
     crossbar.delay = c_b.delay;
     crossbar.power.readOp.dynamic = c_b.power.readOp.dynamic;
@@ -231,7 +231,7 @@ MCPAT_Router::get_router_power()
   buffer_stats();
 
   /* calculate cross-bar stats */
-  cb_stats();
+  cb_stats();//////////////////myedit highlight: this is where cross bar energy initially come from
 
   /* calculate arbiter stats */
   MCPAT_Arbiter vcarb(vc_count, flit_size, buffer.area.w);

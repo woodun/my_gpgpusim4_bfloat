@@ -25,7 +25,7 @@
  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.”
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.鈥�
  *
  ***************************************************************************/
 
@@ -623,7 +623,7 @@ Wire::init_wire(){
   repeated_wire.push_back(Component());
   for (j=sp; j < 4*sp; j+=100) {
     for (i = si; i > 1; i--) {
-      pow = wire_model(j*1e-6, i, &del);
+      pow = wire_model(j*1e-6, i, &del); //////////////////myedit highlight: this is where cross bar energy initially come from
       if (j == sp && i == si) {
         global.delay = del;
         global.power = pow;
@@ -755,6 +755,7 @@ powerDef Wire::wire_model (double space, double size, double *delay)
   short_ckt = deviceType->Vdd * g_tp.min_w_nmos_ * Ishort_ckt * 1.0986 *
     repeater_size * tc;
 
+  //////////////////myedit highlight: this is where cross bar energy initially come from. the true origin.
   ptemp.readOp.dynamic = ((len/repeater_spacing)*(switching + short_ckt));
   ptemp.readOp.leakage = ((len/repeater_spacing)*
       deviceType->Vdd*

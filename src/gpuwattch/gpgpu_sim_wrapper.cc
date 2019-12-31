@@ -380,6 +380,7 @@ void gpgpu_sim_wrapper::set_active_lanes_power(double sp_avg_active_lane, double
 
 void gpgpu_sim_wrapper::set_NoC_power(double noc_tot_reads, double noc_tot_writes )
 {
+	///////////////////myedit highlight: what is the unit of power output?
 	p->sys.NoC[0].total_accesses = noc_tot_reads * p->sys.scaling_coefficients[NOC_A] + noc_tot_writes * p->sys.scaling_coefficients[NOC_A];
 	sample_perf_counters[NOC_A]=noc_tot_reads+noc_tot_writes;
 }
@@ -527,8 +528,10 @@ void gpgpu_sim_wrapper::update_coefficients()
 	effpower_coeff[SFU_ACC]=initpower_coeff[SFU_ACC]*p->sys.scaling_coefficients[SFU_ACC];
 	effpower_coeff[FPU_ACC]=initpower_coeff[FPU_ACC]*p->sys.scaling_coefficients[FPU_ACC];
 
+	///////////////////myedit highlight: reflect the effect on the number and content of flits.
 	initpower_coeff[NOC_A]=proc->get_coefficient_noc_accesses();
 	effpower_coeff[NOC_A]=initpower_coeff[NOC_A]*p->sys.scaling_coefficients[NOC_A];
+	///////////////////myedit highlight: reflect the effect on the number and content of flits.
 
 	const_dynamic_power=proc->get_const_dynamic_power()/(proc->cores[0]->executionTime);
 

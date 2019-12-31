@@ -47,7 +47,7 @@ void mcpat_cycle(const gpgpu_sim_config &config, const struct shader_core_config
 		return;
 	}
 
-	if ((tot_cycle+cycle) % stat_sample_freq == 0) {
+	if ((tot_cycle+cycle) % stat_sample_freq == 0) { ////////////////myedit highlight: config generally use -gpgpu_runtime_stat 500
 
 		wrapper->set_inst_power(shdr_config->gpgpu_clock_gated_lanes,
 				stat_sample_freq, stat_sample_freq,
@@ -98,10 +98,15 @@ void mcpat_cycle(const gpgpu_sim_config &config, const struct shader_core_config
 		wrapper->set_active_lanes_power((power_stats->get_sp_active_lanes())/stat_sample_freq,
 				(power_stats->get_sfu_active_lanes())/stat_sample_freq);
 
-
+		//////////////////myedit highlight: write access sends with full precision, hence no change needed.
 		double n_icnt_simt_to_mem = (double)power_stats->get_icnt_simt_to_mem(); // # flits from SIMT clusters to memory partitions
+		//////////////////myedit highlight: write access sends with full precision, hence no change needed.
+
+
+		//////////////////myedit highlight: updated to reflect the effect on the number and content of flits.
 		double n_icnt_mem_to_simt = (double)power_stats->get_icnt_mem_to_simt(); // # flits from memory partitions to SIMT clusters
 		wrapper->set_NoC_power(n_icnt_mem_to_simt, n_icnt_simt_to_mem); // Number of flits traversing the interconnect
+		//////////////////myedit highlight: write access sends with full precision, hence no change needed.
 
 		wrapper->compute();
 
